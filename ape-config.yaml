@@ -1,4 +1,4 @@
-name: tokenized-strategy-ape-mix
+name: levfarming-tokenized-strategy
 
 plugins:
   - name: solidity
