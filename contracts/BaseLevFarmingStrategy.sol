@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.18;
 
 import {BaseTokenizedStrategy} from "@tokenized-strategy/BaseTokenizedStrategy.sol";
@@ -27,10 +27,10 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
     using SafeERC20 for ERC20;
 
     // Basic constants
-    uint256 private constant MAX_BPS = 1e4;
-    uint256 private constant WAD_BPS_RATIO = 1e14;
-    uint256 private constant COLLATERAL_RATIO_PRECISION = 1 ether;
-    uint256 private constant PESSIMISM_FACTOR = 1000;
+    uint256 internal constant MAX_BPS = 1e4;
+    uint256 internal constant WAD_BPS_RATIO = 1e14;
+    uint256 internal constant COLLATERAL_RATIO_PRECISION = 1 ether;
+    uint256 internal constant PESSIMISM_FACTOR = 1000;
 
     // OPS State Variables
     uint256 private constant DEFAULT_COLLAT_TARGET_MARGIN = 0.02 ether;
@@ -218,16 +218,41 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
         uint256 newAmountBorrowed,
         uint256 currentBorrowed
     ) internal {
+        (uint256 deposits, uint256 borrows) = currentPosition();
+
         if (currentBorrowed > newAmountBorrowed) {
+            uint256 wantBalance = balanceOfWant();
             uint256 totalRepayAmount = currentBorrowed - newAmountBorrowed;
-            _repay(
-                totalRepayAmount < currentBorrowed
-                    ? totalRepayAmount
-                    : type(uint256).max
-            );
+
+            uint256 _maxCollatRatio = maxCollatRatio;
+
+            for (
+                uint8 i = 0;
+                i < maxIterations && totalRepayAmount > minWant;
+                i++
+            ) {
+                uint256 withdrawn = _withdrawExcessCollateral(
+                    _maxCollatRatio,
+                    deposits,
+                    borrows
+                );
+                wantBalance = wantBalance + withdrawn; // track ourselves to save gas
+                uint256 toRepay = totalRepayAmount;
+                if (toRepay > wantBalance) {
+                    toRepay = wantBalance;
+                }
+                uint256 repaid = _repay(toRepay);
+
+                // track ourselves to save gas
+                deposits = deposits - withdrawn;
+                wantBalance = wantBalance - repaid;
+                borrows = borrows - repaid;
+
+                totalRepayAmount = totalRepayAmount - repaid;
+            }
         }
 
-        (uint256 deposits, uint256 borrows) = currentPosition();
+        (deposits, borrows) = currentPosition();
         // deposit back to get targetCollatRatio (we always need to leave this in this ratio)
         uint256 _targetCollatRatio = targetCollatRatio;
         uint256 targetDeposit = getDepositFromBorrow(
