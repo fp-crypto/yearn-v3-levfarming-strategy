@@ -41,7 +41,7 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
     uint256 public targetCollatRatio; // The LTV we are levering up to
     uint256 public maxCollatRatio; // Closest to liquidation we'll risk
 
-    uint256 public minWant;
+    uint256 public minAsset;
     uint256 public minRatio;
     uint256 public minRewardToSell;
 
@@ -64,10 +64,10 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
      * to deposit in the yield source.
      */
     function _invest(uint256 _amount) internal override {
-        uint256 wantBalance = balanceOfWant();
-        // deposit available want as collateral
-        if (wantBalance > minWant) {
-            _deposit(wantBalance);
+        uint256 assetBalance = balanceOfAsset();
+        // deposit available asset as collateral
+        if (assetBalance > minAsset) {
+            _deposit(assetBalance);
         }
 
         // check current LTV
@@ -166,25 +166,25 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
 
     function _leverMax() internal {
         (uint256 deposits, uint256 borrows) = currentPosition();
-        uint256 wantBalance = balanceOfWant();
+        uint256 assetBalance = balanceOfAsset();
 
-        uint256 realSupply = deposits - borrows + wantBalance;
+        uint256 realSupply = deposits - borrows + assetBalance;
         uint256 newBorrow = getBorrowFromSupply(realSupply, targetCollatRatio);
         uint256 totalAmountToBorrow = newBorrow - borrows;
 
         uint8 _maxIterations = maxIterations;
-        uint256 _minWant = minWant;
+        uint256 _minAsset = minAsset;
 
         for (
             uint8 i = 0;
-            i < _maxIterations && totalAmountToBorrow > _minWant;
+            i < _maxIterations && totalAmountToBorrow > _minAsset;
             i++
         ) {
             uint256 amount = totalAmountToBorrow;
 
             // calculate how much borrow to take
             uint256 canBorrow = getBorrowFromDeposit(
-                deposits + wantBalance,
+                deposits + assetBalance,
                 maxBorrowCollatRatio
             );
 
@@ -197,20 +197,20 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
                 amount = canBorrow;
             }
 
-            // deposit available want as collateral
-            _deposit(wantBalance);
+            // deposit available asset as collateral
+            _deposit(assetBalance);
 
             // borrow available amount
             _borrow(amount);
 
             (deposits, borrows) = currentPosition();
-            wantBalance = balanceOfWant();
+            assetBalance = balanceOfAsset();
 
             totalAmountToBorrow = totalAmountToBorrow - amount;
         }
 
-        if (wantBalance >= minWant) {
-            _deposit(wantBalance);
+        if (assetBalance >= minAsset) {
+            _deposit(assetBalance);
         }
     }
 
@@ -221,14 +221,14 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
         (uint256 deposits, uint256 borrows) = currentPosition();
 
         if (currentBorrowed > newAmountBorrowed) {
-            uint256 wantBalance = balanceOfWant();
+            uint256 assetBalance = balanceOfAsset();
             uint256 totalRepayAmount = currentBorrowed - newAmountBorrowed;
 
             uint256 _maxCollatRatio = maxCollatRatio;
 
             for (
                 uint8 i = 0;
-                i < maxIterations && totalRepayAmount > minWant;
+                i < maxIterations && totalRepayAmount > minAsset;
                 i++
             ) {
                 uint256 withdrawn = _withdrawExcessCollateral(
@@ -236,16 +236,16 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
                     deposits,
                     borrows
                 );
-                wantBalance = wantBalance + withdrawn; // track ourselves to save gas
+                assetBalance = assetBalance + withdrawn; // track ourselves to save gas
                 uint256 toRepay = totalRepayAmount;
-                if (toRepay > wantBalance) {
-                    toRepay = wantBalance;
+                if (toRepay > assetBalance) {
+                    toRepay = assetBalance;
                 }
                 uint256 repaid = _repay(toRepay);
 
                 // track ourselves to save gas
                 deposits = deposits - withdrawn;
-                wantBalance = wantBalance - repaid;
+                assetBalance = assetBalance - repaid;
                 borrows = borrows - repaid;
 
                 totalRepayAmount = totalRepayAmount - repaid;
@@ -261,8 +261,8 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
         );
         if (targetDeposit > deposits) {
             uint256 toDeposit = targetDeposit - deposits;
-            if (toDeposit > minWant) {
-                _deposit(Math.min(toDeposit, balanceOfWant()));
+            if (toDeposit > minAsset) {
+                _deposit(Math.min(toDeposit, balanceOfAsset()));
             }
         } else {
             _withdrawExcessCollateral(_targetCollatRatio, deposits, borrows);
@@ -281,7 +281,7 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
         }
     }
 
-    function balanceOfWant() internal view returns (uint256) {
+    function balanceOfAsset() internal view returns (uint256) {
         return ERC20(asset).balanceOf(address(this));
     }
 

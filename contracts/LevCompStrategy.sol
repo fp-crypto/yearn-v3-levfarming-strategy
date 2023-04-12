@@ -6,8 +6,7 @@ import "./interfaces/compound/CErc20I.sol";
 import "./interfaces/compound/ComptrollerI.sol";
 import "./interfaces/uniswap/IUniswapV2Router02.sol";
 
-contract LevCompStrategy is BaseLevFarmingStrategy  {
-    
+contract LevCompStrategy is BaseLevFarmingStrategy {
     address public comp;
     address public weth;
     CErc20I public cToken;
@@ -21,9 +20,7 @@ contract LevCompStrategy is BaseLevFarmingStrategy  {
     constructor(
         address _asset,
         string memory _name
-    ) BaseLevFarmingStrategy(_asset, _name) {
-        
-    }
+    ) BaseLevFarmingStrategy(_asset, _name) {}
 
     function _deposit(uint256 _amount) internal override {
         require(cToken.mint(_amount) == 0);
@@ -54,10 +51,16 @@ contract LevCompStrategy is BaseLevFarmingStrategy  {
     function _sellRewards() internal override {
         uint256 _compAmount = ERC20(comp).balanceOf(address(this));
         if (_compAmount < minCompToSell) {
-             return;
+            return;
         }
 
-        currentRouter.swapExactTokensForTokens(_compAmount, 0, getTokenOutPathV2(address(comp), address(asset)), address(this), block.timestamp);
+        currentRouter.swapExactTokensForTokens(
+            _compAmount,
+            0,
+            getTokenOutPathV2(address(comp), address(asset)),
+            address(this),
+            block.timestamp
+        );
     }
 
     function currentPosition()
@@ -66,13 +69,20 @@ contract LevCompStrategy is BaseLevFarmingStrategy  {
         override
         returns (uint256 deposits, uint256 borrows)
     {
-
-        (, uint256 cTokenBalance, uint256 borrowBalance, uint256 exchangeRate) = cToken.getAccountSnapshot(address(this));
+        (
+            ,
+            uint256 cTokenBalance,
+            uint256 borrowBalance,
+            uint256 exchangeRate
+        ) = cToken.getAccountSnapshot(address(this));
         borrows = borrowBalance;
-        deposits = cTokenBalance * exchangeRate / 1e18;
+        deposits = (cTokenBalance * exchangeRate) / 1e18;
     }
 
-    function getTokenOutPathV2(address _tokenIn, address _tokenOut) internal view returns (address[] memory _path) {
+    function getTokenOutPathV2(
+        address _tokenIn,
+        address _tokenOut
+    ) internal view returns (address[] memory _path) {
         bool isWeth = _tokenIn == address(weth) || _tokenOut == address(weth);
         _path = new address[](isWeth ? 2 : 3);
         _path[0] = _tokenIn;
@@ -85,5 +95,3 @@ contract LevCompStrategy is BaseLevFarmingStrategy  {
         }
     }
 }
-
-
