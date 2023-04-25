@@ -33,9 +33,9 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
     uint256 internal constant PESSIMISM_FACTOR = 1000;
 
     // OPS State Variables
-    uint256 private constant DEFAULT_COLLAT_TARGET_MARGIN = 0.02 ether;
-    uint256 private constant DEFAULT_COLLAT_MAX_MARGIN = 0.005 ether;
-    uint256 private constant LIQUIDATION_WARNING_THRESHOLD = 0.01 ether;
+    uint256 internal constant DEFAULT_COLLAT_TARGET_MARGIN = 0.02 ether;
+    uint256 internal constant DEFAULT_COLLAT_MAX_MARGIN = 0.005 ether;
+    uint256 internal constant LIQUIDATION_WARNING_THRESHOLD = 0.01 ether;
 
     uint256 public maxBorrowCollatRatio; // The maximum the protocol will let us borrow
     uint256 public targetCollatRatio; // The LTV we are levering up to
@@ -43,14 +43,29 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
 
     uint256 public minAsset;
     uint256 public minRatio;
-    uint256 public minRewardToSell;
-
+    uint256 public minRewardSell;
     uint8 public maxIterations;
+
+    bool public initialized;
 
     constructor(
         address _asset,
         string memory _name
     ) BaseTokenizedStrategy(_asset, _name) {}
+
+    function _initStrategy(address _asset) internal virtual {
+        require(!initialized, "already initialized");
+
+        // initialize operational state
+        maxIterations = 12;
+
+        // mins
+        minAsset = 100;
+        minRatio = 0.005 ether;
+        minRewardSell = 1e15;
+
+        initialized = true;
+    }
 
     /**
      * @dev Should invest up to '_amount' of 'asset'.
@@ -71,12 +86,12 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
         }
 
         // check current LTV
-        uint256 _currentCollatRatio = currentCollatRatio();
+        uint256 _liveCollatRatio = liveCollatRatio();
 
         // we should lever up
         if (
-            targetCollatRatio > _currentCollatRatio &&
-            targetCollatRatio - _currentCollatRatio > minRatio
+            targetCollatRatio > _liveCollatRatio &&
+            targetCollatRatio - _liveCollatRatio > minRatio
         ) {
             _leverMax();
         }
@@ -106,7 +121,7 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
     function _freeFunds(uint256 _amount) internal override {
         if (_amount == 0) return;
 
-        (uint256 deposits, uint256 borrows) = currentPosition();
+        (uint256 deposits, uint256 borrows) = livePosition();
 
         if (borrows == 0) {
             _withdraw(Math.min(_amount, deposits));
@@ -147,8 +162,34 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
         _claimRewards();
         _sellRewards();
 
+        uint256 assetBalance = balanceOfAsset();
+        // deposit available asset as collateral
+        if (assetBalance > minAsset) {
+            _deposit(assetBalance);
+        }
+
+        // check current position
+        (uint256 deposits, uint256 borrows) = livePosition();
+        uint256 _currentCollatRatio = getCollatRatio(deposits, borrows);
+
+        if (_currentCollatRatio < targetCollatRatio) {
+            // we should lever up
+            if (targetCollatRatio - _currentCollatRatio > minRatio) {
+                // we only act on relevant differences
+                _leverMax();
+            }
+        } else if (_currentCollatRatio > targetCollatRatio) {
+            if (_currentCollatRatio - targetCollatRatio > minRatio) {
+                uint256 newBorrow = getBorrowFromSupply(
+                    deposits - borrows,
+                    targetCollatRatio
+                );
+                _leverDownTo(newBorrow, borrows);
+            }
+        }
+
         _invested = ERC20(asset).balanceOf(address(this));
-        (uint256 deposits, uint256 borrows) = currentPosition();
+        (deposits, borrows) = livePosition();
         _invested += deposits - borrows;
     }
 
@@ -156,7 +197,7 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
 
     function _withdraw(uint256 _amount) internal virtual returns (uint256) {}
 
-    function _borrow(uint256 _mount) internal virtual {}
+    function _borrow(uint256 _amount) internal virtual {}
 
     function _repay(uint256 _amount) internal virtual returns (uint256) {}
 
@@ -164,8 +205,13 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
 
     function _sellRewards() internal virtual {}
 
+    function _estimateTokenToAsset(
+        address _token,
+        uint256 _amount
+    ) internal view virtual returns (uint256) {}
+
     function _leverMax() internal {
-        (uint256 deposits, uint256 borrows) = currentPosition();
+        (uint256 deposits, uint256 borrows) = livePosition();
         uint256 assetBalance = balanceOfAsset();
 
         uint256 realSupply = deposits - borrows + assetBalance;
@@ -203,7 +249,7 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
             // borrow available amount
             _borrow(amount);
 
-            (deposits, borrows) = currentPosition();
+            (deposits, borrows) = livePosition();
             assetBalance = balanceOfAsset();
 
             totalAmountToBorrow = totalAmountToBorrow - amount;
@@ -218,17 +264,17 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
         uint256 newAmountBorrowed,
         uint256 currentBorrowed
     ) internal {
-        (uint256 deposits, uint256 borrows) = currentPosition();
+        (uint256 deposits, uint256 borrows) = livePosition();
 
         if (currentBorrowed > newAmountBorrowed) {
             uint256 assetBalance = balanceOfAsset();
-            uint256 totalRepayAmount = currentBorrowed - newAmountBorrowed;
+            uint256 remainingRepayAmount = currentBorrowed - newAmountBorrowed;
 
             uint256 _maxCollatRatio = maxCollatRatio;
 
             for (
                 uint8 i = 0;
-                i < maxIterations && totalRepayAmount > minAsset;
+                i < maxIterations && remainingRepayAmount > minAsset;
                 i++
             ) {
                 uint256 withdrawn = _withdrawExcessCollateral(
@@ -237,7 +283,7 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
                     borrows
                 );
                 assetBalance = assetBalance + withdrawn; // track ourselves to save gas
-                uint256 toRepay = totalRepayAmount;
+                uint256 toRepay = remainingRepayAmount;
                 if (toRepay > assetBalance) {
                     toRepay = assetBalance;
                 }
@@ -248,11 +294,11 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
                 assetBalance = assetBalance - repaid;
                 borrows = borrows - repaid;
 
-                totalRepayAmount = totalRepayAmount - repaid;
+                remainingRepayAmount = remainingRepayAmount - repaid;
             }
         }
 
-        (deposits, borrows) = currentPosition();
+        //(deposits, borrows) = livePosition();
         // deposit back to get targetCollatRatio (we always need to leave this in this ratio)
         uint256 _targetCollatRatio = targetCollatRatio;
         uint256 targetDeposit = getDepositFromBorrow(
@@ -285,28 +331,61 @@ abstract contract BaseLevFarmingStrategy is BaseTokenizedStrategy {
         return ERC20(asset).balanceOf(address(this));
     }
 
-    function currentPosition()
+    function estimatedPosition()
         public
         view
         virtual
         returns (uint256 deposits, uint256 borrows)
     {}
 
-    function currentCollatRatio()
+    function livePosition()
+        public
+        virtual
+        returns (uint256 deposits, uint256 borrows)
+    {}
+
+    function estimatedCollatRatio()
         public
         view
-        returns (uint256 _currentCollatRatio)
+        returns (uint256 _estimatedCollatRatio)
     {
-        (uint256 deposits, uint256 borrows) = currentPosition();
-
-        if (deposits > 0 && borrows != 0) {
-            _currentCollatRatio =
-                (borrows * COLLATERAL_RATIO_PRECISION) /
-                deposits;
-        }
+        (uint256 deposits, uint256 borrows) = estimatedPosition();
+        _estimatedCollatRatio = getCollatRatio(deposits, borrows);
     }
 
+    function liveCollatRatio()
+        public
+        returns (uint256 _liveCollatRatio)
+    {
+        (uint256 deposits, uint256 borrows) = livePosition();
+        _liveCollatRatio = getCollatRatio(deposits, borrows);
+    }
+
+    function estimatedTotalAssets() public view returns (uint256 _totalAssets) {
+        _totalAssets += balanceOfAsset();
+        (uint256 deposits, uint256 borrows) = estimatedPosition();
+        _totalAssets += deposits - borrows;
+        _totalAssets += (estimatedRewardsInAsset() * 9000) / 10000;
+    }
+
+    function estimatedRewardsInAsset()
+        public
+        view
+        virtual
+        returns (uint256 _rewardsInWant)
+    {}
+
     // Section: LTV Math
+
+    function getCollatRatio(
+        uint256 deposits,
+        uint256 borrows
+    ) internal pure returns (uint256) {
+        if (deposits == 0 || borrows == 0) {
+            return 0;
+        }
+        return (borrows * COLLATERAL_RATIO_PRECISION) / deposits;
+    }
 
     function getBorrowFromDeposit(
         uint256 deposit,
