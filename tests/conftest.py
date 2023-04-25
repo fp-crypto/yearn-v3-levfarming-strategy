@@ -11,10 +11,15 @@ def asset(tokens):
     yield Contract(tokens["dai"])
 
 
+@pytest.fixture(scope="session")
+def ctoken(asset, ctokens):
+    yield Contract(ctokens[asset.symbol().lower()])
+
+
 # Adjust the amount that should be used for testing based on `asset`.
 @pytest.fixture(scope="session")
 def amount(asset, user, whale):
-    amount = 100 * 10 ** asset.decimals()
+    amount = 10_000 * 10 ** asset.decimals()
 
     asset.transfer(user, amount, sender=whale)
     yield amount
@@ -51,11 +56,19 @@ def keeper(accounts):
 @pytest.fixture(scope="session")
 def tokens():
     tokens = {
-        "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
         "dai": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
         "usdc": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     }
     yield tokens
+
+
+@pytest.fixture(scope="session")
+def ctokens():
+    ctokens = {
+        "dai": "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643",
+        "usdc": "0x39AA39c021dfbaE8faC545936693aC917d5E7563",
+    }
+    yield ctokens
 
 
 @pytest.fixture(scope="session")
@@ -95,8 +108,10 @@ def set_protocol_fee(factory):
 
 @pytest.fixture(scope="session")
 def create_strategy(management, keeper, rewards):
-    def create_strategy(asset, performanceFee=1_000):
-        strategy = management.deploy(project.Strategy, asset, "yStrategy-Example")
+    def create_strategy(asset, ctoken, performanceFee=0):
+        strategy = management.deploy(
+            project.LevCompStrategy, asset, f"LevComp-{asset.symbol()}", ctoken
+        )
         strategy = project.IStrategyInterface.at(strategy.address)
 
         strategy.setKeeper(keeper, sender=management)
@@ -119,8 +134,8 @@ def create_oracle(management):
 
 
 @pytest.fixture(scope="session")
-def strategy(asset, create_strategy):
-    strategy = create_strategy(asset)
+def strategy(asset, ctoken, create_strategy):
+    strategy = create_strategy(asset, ctoken)
 
     yield strategy
 

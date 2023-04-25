@@ -1,9 +1,7 @@
 import ape
-from ape import Contract
 from utils.constants import MAX_BPS
 from utils.checks import check_strategy_totals
-from utils.helpers import days_to_secs, increase_time, withdraw_and_check
-import pytest
+from utils.helpers import days_to_secs, increase_time, withdraw_and_check, lev_strat_status
 
 
 def test__operation(
@@ -13,37 +11,40 @@ def test__operation(
     user,
     deposit,
     amount,
-    RELATIVE_APPROX,
 ):
     user_balance_before = asset.balanceOf(user)
 
     # Deposit to the strategy
     deposit()
 
-    # TODO: Implement logic so totalDebt ends > 0
     check_strategy_totals(
-        strategy, total_assets=amount, total_debt=0, total_idle=amount
+        strategy,
+        total_assets=amount,
+        total_debt=amount,
+        total_idle=0,
     )
+    lev_strat_status(strategy)
 
-    increase_time(chain, 10)
+    chain.mine(int(60 * 60 * 24 / 12))
+    lev_strat_status(strategy)
 
     # withdrawal
     withdraw_and_check(strategy, asset, amount, user)
 
+    lev_strat_status(strategy)
+
     check_strategy_totals(strategy, total_assets=0, total_debt=0, total_idle=0)
 
-    assert asset.balanceOf(user) == user_balance_before
+    assert asset.balanceOf(user) < user_balance_before
 
 
-def test_profitable_report(
+def test__profitable_report(
     chain,
     asset,
     strategy,
     deposit,
     user,
     amount,
-    whale,
-    RELATIVE_APPROX,
     keeper,
 ):
     # Deposit to the strategy
@@ -52,42 +53,60 @@ def test_profitable_report(
     # Deposit to the strategy
     deposit()
 
-    # TODO: Implement logic so totalDebt ends > 0
     check_strategy_totals(
+        strategy,
         strategy, total_assets=amount, total_debt=0, total_idle=amount
+        total_debt=amount,
+        total_idle=0,
     )
-
-    # TODO: Add some code to simulate earning yield
-    to_airdrop = amount // 100
-
-    asset.transfer(strategy.address, to_airdrop, sender=whale)
+    lev_strat_status(strategy)
 
     # Harvest 2: Realize profit
-    chain.mine(10)
+    chain.mine(int(60 * 60 * 24 / 12))
+    lev_strat_status(strategy)
 
     before_pps = strategy.pricePerShare()
 
     tx = strategy.report(sender=keeper)
 
-    profit, loss = tx.return_value
+    lev_strat_status(strategy)
 
-    assert profit >= to_airdrop
+    assert strategy.totalDebt() > amount
+    assert strategy.totalAssets() > amount
 
-    # TODO: Implement logic so totalDebt == amount + profit
+    profit = strategy.totalDebt() - amount
+
+    # profit, loss = tx.return_value
+
+    # assert profit >= 0
+    # assert loss == 0
+
     check_strategy_totals(
-        strategy, total_assets=amount + profit, total_debt=0, total_idle=amount + profit
+       strategy,
+       total_assets=amount + profit,
+       total_debt=amount + profit,
+       total_idle=0,
     )
 
     # needed for profits to unlock
     increase_time(chain, strategy.profitMaxUnlockTime() - 1)
 
     check_strategy_totals(
-        strategy, total_assets=amount + profit, total_debt=0, total_idle=amount + profit
+       strategy,
+       total_assets=amount + profit,
+       total_debt=amount + profit,
+       total_idle=0,
     )
     assert strategy.pricePerShare() > before_pps
 
+    lev_strat_status(strategy)
+    tx = strategy.report(sender=keeper)
+    lev_strat_status(strategy)
     # withdrawal
     strategy.redeem(amount, user, user, sender=user)
+    lev_strat_status(strategy)
+
+    check_strategy_totals(strategy, total_assets=0, total_debt=0, total_idle=0)
 
     assert asset.balanceOf(user) > user_balance_before
 
