@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import {BaseStrategy, ERC20} from "@tokenized-strategy/BaseStrategy.sol";
+import {ERC20} from "@tokenized-strategy/BaseStrategy.sol";
+import {BaseHealthCheck} from "@periphery/Bases/HealthCheck/BaseHealthCheck.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import "forge-std/console.sol"; // TODO: DELETE
 
 // Import interfaces for many popular DeFi projects, or add your own!
 //import "../interfaces/<protocol>/<Interface>.sol";
@@ -23,19 +26,18 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 // NOTE: To implement permissioned functions you can use the onlyManagement and onlyKeepers modifiers
 
-abstract contract BaseLevFarmingStrategy is BaseStrategy {
+abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     using SafeERC20 for ERC20;
 
     // Basic constants
-    uint256 internal constant MAX_BPS = 1e4;
     uint256 internal constant WAD_BPS_RATIO = 1e14;
-    uint256 internal constant COLLATERAL_RATIO_PRECISION = 1 ether;
+    uint256 internal constant COLLATERAL_RATIO_PRECISION = 1e18;
     uint256 internal constant PESSIMISM_FACTOR = 1000;
 
     // OPS State Variables
-    uint256 internal constant DEFAULT_COLLAT_TARGET_MARGIN = 0.02 ether;
-    uint256 internal constant DEFAULT_COLLAT_MAX_MARGIN = 0.005 ether;
-    uint256 internal constant LIQUIDATION_WARNING_THRESHOLD = 0.01 ether;
+    uint256 internal constant DEFAULT_COLLAT_TARGET_MARGIN = 0.02e18;
+    uint256 internal constant DEFAULT_COLLAT_MAX_MARGIN = 0.005e18;
+    uint256 internal constant LIQUIDATION_WARNING_THRESHOLD = 0.01e18;
 
     uint256 public targetCollatRatio; // The LTV we are levering up to
     uint256 public maxBorrowCollatRatio; // The maximum the protocol will let us borrow
@@ -51,7 +53,7 @@ abstract contract BaseLevFarmingStrategy is BaseStrategy {
     constructor(
         address _asset,
         string memory _name
-    ) BaseStrategy(_asset, _name) {}
+    ) BaseHealthCheck(_asset, _name) {}
 
     function _initStrategy(address _asset) internal virtual {
         require(!initialized, "already initialized");
@@ -67,7 +69,11 @@ abstract contract BaseLevFarmingStrategy is BaseStrategy {
         initialized = true;
     }
 
-    function setCollatRatios(uint256 _targetCollatRatio, uint256 _maxBorrowCollatRatio, uint256 _maxCollatRatio) external virtual onlyManagement {
+    function setCollatRatios(
+        uint256 _targetCollatRatio,
+        uint256 _maxBorrowCollatRatio,
+        uint256 _maxCollatRatio
+    ) external virtual onlyManagement {
         targetCollatRatio = _targetCollatRatio;
         maxBorrowCollatRatio = _maxBorrowCollatRatio;
         maxCollatRatio = _maxCollatRatio;
@@ -127,20 +133,29 @@ abstract contract BaseLevFarmingStrategy is BaseStrategy {
     function _freeFunds(uint256 _amount) internal override {
         if (_amount == 0) return;
 
-        (uint256 deposits, uint256 borrows) = livePosition();
+        (uint256 _deposits, uint256 _borrows) = livePosition();
 
-        if (borrows == 0) {
-            _withdraw(Math.min(_amount, deposits));
+        if (_borrows == 0) {
+            _withdraw(Math.min(_amount, _deposits));
             return;
         }
 
-        uint256 realAssets = deposits - borrows;
-        uint256 amountRequired = Math.min(_amount, realAssets);
-        uint256 newSupply = realAssets - amountRequired;
-        uint256 newBorrow = getBorrowFromSupply(newSupply, targetCollatRatio);
+        uint256 _currentSupply = _deposits - _borrows;
+        uint256 _amountRequired = Math.min(_amount, _currentSupply);
+        uint256 _newSupply = _currentSupply - _amountRequired;
+        uint256 _targetCollatRatio = targetCollatRatio;
+        uint256 _newBorrow = getBorrowFromSupply(
+            _newSupply,
+            _targetCollatRatio
+        );
 
-        // repay required amount
-        _leverDownTo(newBorrow, borrows);
+        if (_newBorrow < _borrows) {
+            _leverDownTo(_newBorrow, _deposits, _borrows);
+            (_deposits, _borrows) = livePosition();
+            _withdrawExcessCollateral(_targetCollatRatio, _deposits, _borrows);
+        } else {
+            _withdraw(_amount);
+        }
     }
 
     /**
@@ -173,35 +188,93 @@ abstract contract BaseLevFarmingStrategy is BaseStrategy {
         _claimRewards();
         _sellRewards();
 
-        uint256 assetBalance = balanceOfAsset();
+        _tend(balanceOfAsset());
+
+        _totalAssets = balanceOfAsset();
+        (uint256 _deposits, uint256 _borrows) = livePosition();
+        _totalAssets += _deposits - _borrows;
+    }
+
+    /**
+     * @dev Optional function for strategist to override that can
+     *  be called in between reports.
+     *
+     * If '_tend' is used tendTrigger() will also need to be overridden.
+     *
+     * This call can only be called by a permissioned role so may be
+     * through protected relays.
+     *
+     * This can be used to harvest and compound rewards, deposit idle funds,
+     * perform needed position maintenance or anything else that doesn't need
+     * a full report for.
+     *
+     *   EX: A strategy that can not deposit funds without getting
+     *       sandwiched can use the tend when a certain threshold
+     *       of idle to totalAssets has been reached.
+     *
+     * This will have no effect on PPS of the strategy till report() is called.
+     *
+     * @param _totalIdle The current amount of idle funds that are available to deploy.
+     *
+     */
+    function _tend(uint256 _totalIdle) internal override {
         // deposit available asset as collateral
-        if (assetBalance > minAsset) {
-            _deposit(assetBalance);
+        if (_totalIdle > minAsset) {
+            _deposit(_totalIdle);
         }
 
-        // check current position
-        (uint256 deposits, uint256 borrows) = livePosition();
-        uint256 _currentCollatRatio = getCollatRatio(deposits, borrows);
+        (uint256 _deposits, uint256 _borrows) = livePosition();
+        uint256 _currentCollatRatio = getCollatRatio(_deposits, _borrows);
+        uint256 _targetCollatRatio = targetCollatRatio;
+        uint256 _minRatio = minRatio;
 
-        if (_currentCollatRatio < targetCollatRatio) {
+        if (_currentCollatRatio < _targetCollatRatio) {
             // we should lever up
-            if (targetCollatRatio - _currentCollatRatio > minRatio) {
+            if (_targetCollatRatio - _currentCollatRatio > _minRatio) {
                 // we only act on relevant differences
                 _leverMax();
             }
         } else if (_currentCollatRatio > targetCollatRatio) {
-            if (_currentCollatRatio - targetCollatRatio > minRatio) {
+            if (_currentCollatRatio - _targetCollatRatio > _minRatio) {
                 uint256 newBorrow = getBorrowFromSupply(
-                    deposits - borrows,
-                    targetCollatRatio
+                    _deposits - _borrows,
+                    _targetCollatRatio
                 );
-                _leverDownTo(newBorrow, borrows);
+                _leverDownTo(newBorrow, _deposits, _borrows);
             }
         }
+    }
 
-        _totalAssets = ERC20(asset).balanceOf(address(this));
-        (deposits, borrows) = livePosition();
-        _totalAssets += deposits - borrows;
+    /**
+     * @dev Optional function for a strategist to override that will
+     * allow management to manually withdraw deployed funds from the
+     * yield source if a strategy is shutdown.
+     *
+     * This should attempt to free `_amount`, noting that `_amount` may
+     * be more than is currently deployed.
+     *
+     * NOTE: This will not realize any profits or losses. A separate
+     * {report} will be needed in order to record any profit/loss. If
+     * a report may need to be called after a shutdown it is important
+     * to check if the strategy is shutdown during {_harvestAndReport}
+     * so that it does not simply re-deploy all funds that had been freed.
+     *
+     * EX:
+     *   if(freeAsset > 0 && !TokenizedStrategy.isShutdown()) {
+     *       depositFunds...
+     *    }
+     *
+     * @param _amount The amount of asset to attempt to free.
+     *
+     */
+    function _emergencyWithdraw(uint256 _amount) internal override {
+        (uint256 _deposits, uint256 _borrows) = livePosition();
+
+        if (_borrows > minAsset) {
+            _leverDownTo(0, _deposits, _borrows);
+        }
+        (_deposits, _borrows) = livePosition();
+        if (_borrows == 0) _withdraw(Math.min(_deposits, _amount));
     }
 
     function _deposit(uint256 _amount) internal virtual {}
@@ -229,6 +302,15 @@ abstract contract BaseLevFarmingStrategy is BaseStrategy {
         uint256 newBorrow = getBorrowFromSupply(realSupply, targetCollatRatio);
         uint256 totalAmountToBorrow = newBorrow - borrows;
 
+        _leverUpTo(totalAmountToBorrow, assetBalance, deposits, borrows);
+    }
+
+    function _leverUpTo(
+        uint256 totalAmountToBorrow,
+        uint256 assetBalance,
+        uint256 deposits,
+        uint256 borrows
+    ) internal virtual {
         uint8 _maxIterations = maxIterations;
         uint256 _minAsset = minAsset;
 
@@ -272,57 +354,57 @@ abstract contract BaseLevFarmingStrategy is BaseStrategy {
     }
 
     function _leverDownTo(
-        uint256 newAmountBorrowed,
-        uint256 currentBorrowed
-    ) internal {
-        (uint256 deposits, uint256 borrows) = livePosition();
+        uint256 _targetAmountBorrowed,
+        uint256 _deposits,
+        uint256 _borrows
+    ) internal virtual {
+        uint256 _minAsset = minAsset;
 
-        if (currentBorrowed > newAmountBorrowed) {
-            uint256 assetBalance = balanceOfAsset();
-            uint256 remainingRepayAmount = currentBorrowed - newAmountBorrowed;
+        if (_borrows > _targetAmountBorrowed) {
+            uint256 _assetBalance = balanceOfAsset();
+            uint256 _remainingRepayAmount = _borrows - _targetAmountBorrowed;
 
             uint256 _maxCollatRatio = maxCollatRatio;
+            uint8 _maxIterations = maxIterations;
 
             for (
                 uint8 i = 0;
-                i < maxIterations && remainingRepayAmount > minAsset;
+                i < _maxIterations && _remainingRepayAmount > _minAsset;
                 i++
             ) {
-                uint256 withdrawn = _withdrawExcessCollateral(
+                uint256 _withdrawn = _withdrawExcessCollateral(
                     _maxCollatRatio,
-                    deposits,
-                    borrows
+                    _deposits,
+                    _borrows
                 );
-                assetBalance = assetBalance + withdrawn; // track ourselves to save gas
-                uint256 toRepay = remainingRepayAmount;
-                if (toRepay > assetBalance) {
-                    toRepay = assetBalance;
+                _assetBalance = _assetBalance + _withdrawn; // track ourselves to save gas
+                uint256 _toRepay = _remainingRepayAmount;
+                if (_toRepay > _assetBalance) {
+                    _toRepay = _assetBalance;
                 }
-                uint256 repaid = _repay(toRepay);
+                uint256 _repaid = _repay(_toRepay);
 
                 // track ourselves to save gas
-                deposits = deposits - withdrawn;
-                assetBalance = assetBalance - repaid;
-                borrows = borrows - repaid;
+                _deposits = _deposits - _withdrawn;
+                _assetBalance = _assetBalance - _repaid;
+                _borrows = _borrows - _repaid;
 
-                remainingRepayAmount = remainingRepayAmount - repaid;
+                _remainingRepayAmount = _remainingRepayAmount - _repaid;
             }
         }
 
         //(deposits, borrows) = livePosition();
         // deposit back to get targetCollatRatio (we always need to leave this in this ratio)
         uint256 _targetCollatRatio = targetCollatRatio;
-        uint256 targetDeposit = getDepositFromBorrow(
-            borrows,
+        uint256 _targetDeposit = getDepositFromBorrow(
+            _borrows,
             _targetCollatRatio
         );
-        if (targetDeposit > deposits) {
-            uint256 toDeposit = targetDeposit - deposits;
-            if (toDeposit > minAsset) {
-                _deposit(Math.min(toDeposit, balanceOfAsset()));
+        if (_targetDeposit > _deposits) {
+            uint256 _toDeposit = _targetDeposit - _deposits;
+            if (_toDeposit > _minAsset) {
+                _deposit(Math.min(_toDeposit, balanceOfAsset()));
             }
-        } else {
-            _withdrawExcessCollateral(_targetCollatRatio, deposits, borrows);
         }
     }
 
