@@ -26,14 +26,13 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
     IPool public immutable POOL;
     IPoolDataProvider private immutable PROTOCOL_DATA_PROVIDER;
     IRewardsController private immutable REWARDS_CONTROLLER;
+    IAToken public immutable A_TOKEN;
+    IVariableDebtToken public immutable DEBT_TOKEN;
 
     bool public flashloanEnabled = true;
 
     uint16 private constant REFERRAL = 0;
 
-    // Supply and borrow tokens
-    IAToken public immutable A_TOKEN;
-    IVariableDebtToken public immutable DEBT_TOKEN;
     address[] private rewardTokens;
 
     /// @notice Initializes the strategy with required addresses and settings
@@ -216,16 +215,16 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
     /// @dev This function is called after your contract has received the flash loaned amount
     /// @param assets The addresses of the assets being flash-borrowed
     /// @param amounts The amounts of the assets being flash-borrowed
-    /// @param premiums The fees to be paid for each asset flash-borrowed
+    /// @param . The fees to be paid for each asset flash-borrowed
     /// @param initiator The address initiating the flash loan
-    /// @param params Arbitrary bytes passed to the flashLoan function
+    /// @param . Arbitrary bytes passed to the flashLoan function
     /// @return success Whether the operation was successful
     function executeOperation(
         address[] calldata assets,
         uint256[] calldata amounts,
-        uint256[] calldata premiums,
+        uint256[] calldata /*premiums*/,
         address initiator,
-        bytes calldata params
+        bytes calldata /*params*/
     ) external returns (bool) {
         require(address(POOL) == msg.sender); // dev: callers must be the aave pool
         require(initiator == address(this)); // dev: initiator must be this strategy
@@ -295,13 +294,12 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         // TODO: Implement
     }
 
-    /// @notice Gets the protocol's LTV and liquidation threshold values
+    /// @inheritdoc BaseLevFarmingStrategy
     /// @dev Takes into account E-Mode if enabled
-    /// @return ltv The loan-to-value ratio in WAD
-    /// @return liquidationThreshold The liquidation threshold in WAD
     function getProtocolLTVs()
         internal
         view
+        override
         returns (uint256 ltv, uint256 liquidationThreshold)
     {
         uint8 _emodeCategory = uint8(POOL.getUserEMode(address(this)));

@@ -8,6 +8,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract OperationTest is Setup {
     function setUp() public virtual override {
         super.setUp();
+        setFees(0, 0);
     }
 
     function test_setupStrategyOK() public {
@@ -20,8 +21,13 @@ contract OperationTest is Setup {
         // TODO: add additional check on strat params
     }
 
-    function test_operation(uint256 _amount) public {
+    function test_operation(uint256 _amount, bool _noFlashloans) public {
         _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
+
+        if (_noFlashloans) {
+            vm.prank(management);
+            strategy.setFlashloanEnabled(false);
+        }
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
@@ -63,9 +69,13 @@ contract OperationTest is Setup {
         logStrategyInfo();
     }
 
-    function test_profitableReport(uint256 _amount) public {
+    function test_profitableReport(uint256 _amount, bool _noFlashloans) public {
         _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
-        setFees(0, 0); // set fees to 0 to make life easy
+
+        if (_noFlashloans) {
+            vm.prank(management);
+            strategy.setFlashloanEnabled(false);
+        }
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
@@ -113,10 +123,16 @@ contract OperationTest is Setup {
     function test_withdrawSubset(
         uint256 _depositAmount,
         uint256 _withdrawAmount,
-        bool profit
+        bool _profit,
+        bool _noFlashloans
     ) public {
         _depositAmount = bound(_depositAmount, minFuzzAmount, maxFuzzAmount);
         _withdrawAmount = bound(_withdrawAmount, 1e18, _depositAmount - 1e18);
+
+        if (_noFlashloans) {
+            vm.prank(management);
+            strategy.setFlashloanEnabled(false);
+        }
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _depositAmount);
@@ -128,7 +144,7 @@ contract OperationTest is Setup {
 
         checkStrategyTotals(strategy, _depositAmount, _depositAmount, 0);
 
-        if (profit) {
+        if (_profit) {
             // Make money
             skip(REPORTING_PERIOD);
             vm.prank(keeper);
@@ -159,7 +175,7 @@ contract OperationTest is Setup {
         uint256 actualRatio = ((asset.balanceOf(user) - balanceBefore) * 1e4) /
             totalAssetsBefore;
 
-        if (profit) {
+        if (_profit) {
             assertLe(actualRatio, targetRatio, "!ratio");
         } else {
             assertApproxEq(
@@ -176,7 +192,7 @@ contract OperationTest is Setup {
         vm.prank(user);
         strategy.redeem(redeemAmount, user, user);
 
-        if (profit) {
+        if (_profit) {
             assertRelApproxEq(
                 asset.balanceOf(user),
                 balanceBefore + (_depositAmount - _withdrawAmount),
@@ -187,7 +203,8 @@ contract OperationTest is Setup {
 
     function test_depositWhenPositionIsOpen(
         uint256 _initialAmount,
-        uint256 _subsequentAmount
+        uint256 _subsequentAmount,
+        bool _noFlashloans
     ) public {
         _initialAmount = bound(
             _initialAmount,
@@ -199,6 +216,11 @@ contract OperationTest is Setup {
             1e18,
             maxFuzzAmount - _initialAmount
         );
+
+        if (_noFlashloans) {
+            vm.prank(management);
+            strategy.setFlashloanEnabled(false);
+        }
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _initialAmount);
@@ -236,17 +258,17 @@ contract OperationTest is Setup {
     function test_ltvChanges(
         uint256 _amount,
         uint64 _startingLtv,
-        uint64 _endingLtv
+        uint64 _endingLtv,
+        bool _noFlashloans
     ) public {
         _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
-        _startingLtv = uint64(
-            bound(_startingLtv, 0, strategy.targetLTV())
-        );
+        _startingLtv = uint64(bound(_startingLtv, 0, strategy.targetLTV()));
         _endingLtv = uint64(bound(_endingLtv, 0, strategy.targetLTV()));
-        //vm.assume(
-        //    Helpers.abs(int64(strategy.ltvs().targetLTV) - int64(_endingLtv)) >
-        //        strategy.ltvs().minAdjustThreshold
-        //); // change must be more than the minimum adjustment threshold
+
+        if (_noFlashloans) {
+            vm.prank(management);
+            strategy.setFlashloanEnabled(false);
+        }
 
         vm.startPrank(management);
         strategy.setLTVs(

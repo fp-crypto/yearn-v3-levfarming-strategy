@@ -49,7 +49,7 @@ contract TendTriggerTest is Setup {
         for (
             ;
             strategy.estimatedLTV() < strategy.targetLTV() ||
-                strategy.estimatedLTV() - strategy.targetLTV() < 0.01e18;
+                strategy.estimatedLTV() < strategy.maxLTV();
 
         ) {
             skip(7 days);
