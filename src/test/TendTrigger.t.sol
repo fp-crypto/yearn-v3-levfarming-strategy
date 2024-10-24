@@ -2,92 +2,81 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console.sol";
-import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
+import {Setup} from "./utils/Setup.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract TendTriggerTest is Setup {
-    uint256 public constant REPORTING_PERIOD = 60 days;
-
     function setUp() public virtual override {
         super.setUp();
     }
 
-    // function test_tendTrigger(uint256 _amount) public {
-    //     _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
+    function test_tendTrigger(uint256 _amount) public {
+        _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
 
-    //     (bool trigger, ) = strategy.tendTrigger();
-    //     assertFalse(trigger); // trigger should be false as position isn't open
+        (bool trigger, ) = strategy.tendTrigger();
+        assertFalse(trigger, "no assets"); // trigger should be false there are no assets
 
-    //     // Deposit into strategy
-    //     mintAndDepositIntoStrategy(strategy, user, _amount);
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
 
-    //     (trigger, ) = strategy.tendTrigger();
-    //     assertFalse(trigger); // tend will never be true due to loose funds
+        (trigger, ) = strategy.tendTrigger();
+        assertFalse(trigger, "no time has passed");
 
-    //     vm.prank(keeper);
-    //     strategy.tend();
-    //     assertTrue(strategy.positionOpen());
-    //     checkLTV(false);
+        logStrategyInfo();
+        // Skip some time until we surpass the minAdjustRatio
+        for (
+            ;
+            strategy.estimatedLTV() < strategy.targetLTV() ||
+                strategy.estimatedLTV() - strategy.targetLTV() <
+                strategy.minAdjustRatio();
 
-    //     // Skip some time
-    //     skip(1 days);
+        ) {
+            skip(1 days);
+        }
 
-    //     strategy.logStrategyInfo();
+        logStrategyInfo();
 
-    //     (trigger, ) = strategy.tendTrigger();
-    //     assertFalse(trigger);
+        // False due to fee too high
+        vm.fee(uint256(strategy.maxTendBasefeeGwei()) * 1e9 + 1);
+        (trigger, ) = strategy.tendTrigger();
 
-    //     // Skip some time
-    //     skip(1 days);
-    //     Helpers.generatePaperProfitOrLoss(vm, strategy, -125);
-    //     strategy.logStrategyInfo();
+        // True due to fee below max
+        vm.fee(uint256(strategy.maxTendBasefeeGwei()) * 1e9 - 1);
+        (trigger, ) = strategy.tendTrigger();
+        assertTrue(trigger, "fee okay");
 
-    //     // False due to fee too high
-    //     vm.fee(strategy.maxTendBasefee() + 1);
-    //     (trigger, ) = strategy.tendTrigger();
-    //     assertFalse(trigger);
+        // Skip some time until we surpass the warning threshold
+        for (
+            ;
+            strategy.estimatedLTV() < strategy.targetLTV() ||
+                strategy.estimatedLTV() - strategy.targetLTV() < 0.01e18;
 
-    //     // True due to fee below max
-    //     vm.fee(strategy.maxTendBasefee() - 1);
-    //     (trigger, ) = strategy.tendTrigger();
-    //     assertTrue(trigger);
+        ) {
+            skip(7 days);
+        }
 
-    //     skip(1 days);
-    //     Helpers.generatePaperProfitOrLoss(vm, strategy, -125);
-    //     strategy.logStrategyInfo();
+        logStrategyInfo();
 
-    //     // True because LTV is above emergency threshold
-    //     vm.fee(strategy.maxTendBasefee() + 1);
-    //     (trigger, ) = strategy.tendTrigger();
-    //     assertTrue(trigger);
+        // True because LTV is above emergency threshold
+        vm.fee(uint256(strategy.maxTendBasefeeGwei()) * 1e9 + 1);
+        (trigger, ) = strategy.tendTrigger();
+        assertTrue(trigger);
 
-    //     vm.prank(keeper);
-    //     strategy.tend();
-    //     checkLTV(false);
+        vm.prank(keeper);
+        strategy.tend();
+        checkLTV(false);
+        logStrategyInfo();
 
-    //     vm.fee(strategy.maxTendBasefee() - 1);
-    //     (trigger, ) = strategy.tendTrigger();
-    //     assertFalse(trigger);
+        vm.fee(uint256(strategy.maxTendBasefeeGwei()) * 1e9 - 1);
+        (trigger, ) = strategy.tendTrigger();
+        assertFalse(trigger);
 
-    //     // Unlock Profits
-    //     skip(strategy.profitMaxUnlockTime());
+        // Unlock Profits
+        skip(strategy.profitMaxUnlockTime());
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
 
-    //     (trigger, ) = strategy.tendTrigger();
-    //     assertFalse(trigger);
-
-    //     // Skip some time
-    //     skip(1 days);
-    //     Helpers.generatePaperProfitOrLoss(vm, strategy, 125);
-    //     strategy.logStrategyInfo();
-
-    //     // LTV should be below min threshold
-    //     (trigger, ) = strategy.tendTrigger();
-    //     assertTrue(trigger);
-
-    //     vm.prank(user);
-    //     strategy.redeem(_amount, user, user);
-
-    //     (trigger, ) = strategy.tendTrigger();
-    //     assertTrue(!trigger);
-    // }
+        (trigger, ) = strategy.tendTrigger();
+        assertFalse(trigger);
+    }
 }

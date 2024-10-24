@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import "./BaseLevFarmingStrategy.sol";
+import {BaseLevFarmingStrategy, ERC20, SafeERC20, Math} from "./BaseLevFarmingStrategy.sol";
 
 import {IPoolDataProvider} from "./interfaces/aave/v3/core/IPoolDataProvider.sol";
 import {IAToken} from "./interfaces/aave/v3/core/IAToken.sol";
@@ -14,21 +14,20 @@ import {IRewardsController} from "./interfaces/aave/v3/periphery/IRewardsControl
 
 import "forge-std/console.sol"; // TODO: DELETE
 
+/// @title Leveraged Aave Strategy
+/// @notice A strategy that uses Aave V3 for leveraged lending/borrowing
+/// @dev Implements flash loans and leveraged positions using Aave V3 protocol
+/// @author Generic Leverage Farming Strategy Team
 contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
     using SafeERC20 for ERC20;
 
-    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-
     // protocol address
-    IPoolDataProvider private constant PROTOCOL_DATA_PROVIDER =
-        IPoolDataProvider(0x41393e5e337606dc3821075Af65AeE84D7688CBD);
-    IRewardsController private constant REWARDS_CONTROLLER =
-        IRewardsController(0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb);
+    IPoolAddressesProvider public immutable ADDRESSES_PROVIDER;
+    IPool public immutable POOL;
+    IPoolDataProvider private immutable PROTOCOL_DATA_PROVIDER;
+    IRewardsController private immutable REWARDS_CONTROLLER;
 
-    IPool public constant POOL =
-        IPool(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2);
-    IPoolAddressesProvider public constant ADDRESSES_PROVIDER =
-        IPoolAddressesProvider(0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e);
+    bool public flashloanEnabled = true;
 
     uint16 private constant REFERRAL = 0;
 
@@ -37,23 +36,30 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
     IVariableDebtToken public debtToken;
     address[] private rewardTokens;
 
-    bool public flashloanEnabled = true;
-
+    /// @notice Initializes the strategy with required addresses and settings
+    /// @param _asset The underlying asset token address
+    /// @param _name The name of the strategy
+    /// @param _addressesProvider The Aave V3 addresses provider contract address
     constructor(
         address _asset,
-        string memory _name
+        string memory _name,
+        address _addressesProvider
     ) BaseLevFarmingStrategy(_asset, _name) {
-        _initStrategy(_asset);
-    }
-
-    function _initStrategy(address _asset) internal override {
-        super._initStrategy(_asset);
+        ADDRESSES_PROVIDER = IPoolAddressesProvider(_addressesProvider);
+        POOL = IPool(IPoolAddressesProvider(_addressesProvider).getPool());
+        PROTOCOL_DATA_PROVIDER = IPoolDataProvider(
+            IPoolAddressesProvider(_addressesProvider).getPoolDataProvider()
+        );
+        REWARDS_CONTROLLER = IRewardsController(
+            IPoolAddressesProvider(_addressesProvider).getAddress(
+                keccak256("INCENTIVES_CONTROLLER")
+            )
+        );
 
         // Set lending+borrowing tokens
         (address _aToken, , address _debtToken) = PROTOCOL_DATA_PROVIDER
             .getReserveTokensAddresses(address(asset));
 
-        require(address(aToken) == address(0), "!already initialized");
         aToken = IAToken(_aToken);
         debtToken = IVariableDebtToken(_debtToken);
 
@@ -66,37 +72,54 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         ERC20(address(_aToken)).safeApprove(address(POOL), type(uint256).max);
     }
 
-    function setCollatRatios(
-        uint256 _targetCollatRatio,
-        uint256 _maxBorrowCollatRatio,
-        uint256 _maxCollatRatio
+    /// @notice Sets the Loan-to-Value ratios for the strategy
+    /// @dev All values should be in WAD (1e18) format
+    /// @param _targetLTV The target LTV ratio to maintain
+    /// @param _maxBorrowLTV The maximum LTV ratio for borrowing
+    /// @param _maxLTV The maximum allowed LTV ratio
+    function setLTVs(
+        uint64 _targetLTV,
+        uint64 _maxBorrowLTV,
+        uint64 _maxLTV
     ) external override onlyManagement {
-        (uint256 ltv, uint256 liquidationThreshold) = getProtocolCollatRatios();
-        require(_targetCollatRatio < liquidationThreshold);
-        require(_maxCollatRatio < liquidationThreshold);
-        require(_targetCollatRatio < _maxCollatRatio);
-        require(_maxBorrowCollatRatio < ltv);
+        (uint256 ltv, uint256 liquidationThreshold) = getProtocolLTVs();
+        require(_targetLTV < liquidationThreshold);
+        require(_maxLTV < liquidationThreshold);
+        require(_targetLTV < _maxLTV);
+        require(_maxBorrowLTV < ltv);
 
-        targetCollatRatio = _targetCollatRatio;
-        maxCollatRatio = _maxCollatRatio;
-        maxBorrowCollatRatio = _maxBorrowCollatRatio;
+        targetLTV = _targetLTV;
+        maxBorrowLTV = _maxBorrowLTV;
+        maxLTV = _maxLTV;
     }
 
+    /// @notice Enables or disables flash loan functionality
+    /// @param _flashloanEnabled True to enable flash loans, false to disable
+    function setFlashloanEnabled(
+        bool _flashloanEnabled
+    ) external onlyManagement {
+        flashloanEnabled = _flashloanEnabled;
+    }
+
+    /// @inheritdoc BaseLevFarmingStrategy
     function _deposit(uint256 _amount) internal override {
         if (_amount == 0) return;
         POOL.supply(address(asset), _amount, address(this), REFERRAL);
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function _withdraw(uint256 _amount) internal override returns (uint256) {
         if (_amount == 0) return 0;
         return POOL.withdraw(address(asset), _amount, address(this));
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function _borrow(uint256 _amount) internal override {
         if (_amount == 0) return;
         POOL.borrow(address(asset), _amount, 2, REFERRAL, address(this));
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function _repay(uint256 _amount) internal override returns (uint256) {
         if (_amount == 0) return 0;
         return POOL.repay(address(asset), _amount, 2, address(this));
@@ -107,6 +130,7 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         return POOL.repayWithATokens(address(asset), _amount, 2);
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function _leverUpTo(
         uint256 totalAmountToBorrow,
         uint256 assetBalance,
@@ -124,6 +148,7 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         _flashloan(totalAmountToBorrow);
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function _leverDownTo(
         uint256 _targetAmountBorrowed,
         uint256 /*_deposits*/,
@@ -151,29 +176,56 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         );
     }
 
-    function _setEMode(bool _enableEmode) internal {
-        uint8 _emodeCategory = uint8(
-            PROTOCOL_DATA_PROVIDER.getReserveEModeCategory(address(asset))
-        );
-        if (_emodeCategory == 0) return;
-        POOL.setUserEMode(_enableEmode ? _emodeCategory : 0);
-    }
+    // function _setEMode(bool _enableEmode) internal {
+    //     uint8 _emodeCategory;
+
+    //     for (uint8 i = 1; i < 255; i++) {
+    //         DataTypes.CollateralConfig memory cfg = pool
+    //             .getEModeCategoryCollateralConfig(i);
+    //         // check if it is an active eMode
+    //         if (cfg.liquidationThreshold != 0) {
+    //             EModeConfiguration.isReserveEnabledOnBitmap(
+    //                 pool.getEModeCategoryCollateralBitmap(i),
+    //                 someReserveIndex
+    //             );
+    //             EModeConfiguration.isReserveEnabledOnBitmap(
+    //                 pool.getEModeCategoryBorrowableBitmap(i),
+    //                 someReserveIndex
+    //             );
+    //         }
+    //     }
+
+    //     uint8 _emodeCategory = uint8(
+    //         PROTOCOL_DATA_PROVIDER.getReserveEModeCategory(address(asset))
+    //     );
+    //     if (_emodeCategory == 0) return;
+    //     POOL.setUserEMode(_enableEmode ? _emodeCategory : 0);
+    // }
 
     function _autoConfigureLTVs() internal {
-        (uint256 ltv, uint256 liquidationThreshold) = getProtocolCollatRatios();
-        targetCollatRatio = ltv - DEFAULT_COLLAT_TARGET_MARGIN;
-        maxCollatRatio = liquidationThreshold - DEFAULT_COLLAT_MAX_MARGIN;
-        maxBorrowCollatRatio = ltv - DEFAULT_COLLAT_MAX_MARGIN;
+        (uint256 ltv, uint256 liquidationThreshold) = getProtocolLTVs();
+        require(ltv > DEFAULT_COLLAT_TARGET_MARGIN); // dev: !ltv
+        targetLTV = uint64(ltv) - DEFAULT_COLLAT_TARGET_MARGIN;
+        maxLTV = uint64(liquidationThreshold) - DEFAULT_COLLAT_MAX_MARGIN;
+        maxBorrowLTV = uint64(ltv) - DEFAULT_COLLAT_MAX_MARGIN;
     }
 
     // flashloan callback
 
+    /// @notice Callback function called by Aave after flash loan
+    /// @dev This function is called after your contract has received the flash loaned amount
+    /// @param assets The addresses of the assets being flash-borrowed
+    /// @param amounts The amounts of the assets being flash-borrowed
+    /// @param premiums The fees to be paid for each asset flash-borrowed
+    /// @param initiator The address initiating the flash loan
+    /// @param params Arbitrary bytes passed to the flashLoan function
+    /// @return success Whether the operation was successful
     function executeOperation(
         address[] calldata assets,
         uint256[] calldata amounts,
-        uint256[] calldata /* premiums */,
+        uint256[] calldata premiums,
         address initiator,
-        bytes calldata /* params */
+        bytes calldata params
     ) external returns (bool) {
         require(address(POOL) == msg.sender); // dev: callers must be the aave pool
         require(initiator == address(this)); // dev: initiator must be this strategy
@@ -183,6 +235,7 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         return true;
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function _claimRewards() internal override {
         IRewardsController _rewardsController = REWARDS_CONTROLLER;
         address[] memory assets = new address[](2);
@@ -191,10 +244,12 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         _rewardsController.claimAllRewards(assets, address(this));
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function _sellRewards() internal override {
         // TODO: implement
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function estimatedPosition()
         public
         view
@@ -204,6 +259,7 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         (deposits, borrows) = _currentPosition();
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function livePosition()
         public
         override
@@ -221,6 +277,7 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         borrows = ERC20(address(debtToken)).balanceOf(address(this));
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function _estimateTokenToAsset(
         address _from,
         uint256 _amount
@@ -228,6 +285,7 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         // TODO: Implement
     }
 
+    /// @inheritdoc BaseLevFarmingStrategy
     function estimatedRewardsInAsset()
         public
         view
@@ -237,7 +295,11 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         // TODO: Implement
     }
 
-    function getProtocolCollatRatios()
+    /// @notice Gets the protocol's LTV and liquidation threshold values
+    /// @dev Takes into account E-Mode if enabled
+    /// @return ltv The loan-to-value ratio in WAD
+    /// @return liquidationThreshold The liquidation threshold in WAD
+    function getProtocolLTVs()
         internal
         view
         returns (uint256 ltv, uint256 liquidationThreshold)

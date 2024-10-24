@@ -8,75 +8,122 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import "forge-std/console.sol"; // TODO: DELETE
-
-// Import interfaces for many popular DeFi projects, or add your own!
-//import "../interfaces/<protocol>/<Interface>.sol";
-
 /**
- * The `TokenizedStrategy` variable can be used to retrieve the strategies
- * specifc storage data your contract.
- *
- *       i.e. uint256 totalAssets = TokenizedStrategy.totalAssets()
- *
- * This can not be used for write functions. Any TokenizedStrategy
- * variables that need to be udpated post deployement will need to
- * come from an external call from the strategies specific `management`.
+ * @title Base Leveraged Farming Strategy
+ * @notice Abstract base contract for leveraged yield farming strategies
+ * @dev Implements core leveraged farming functionality with configurable LTV ratios,
+ *      automated position management, and safety checks
  */
-
-// NOTE: To implement permissioned functions you can use the onlyManagement and onlyKeepers modifiers
-
 abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     using SafeERC20 for ERC20;
 
-    // Basic constants
+    /// @notice Ratio between WAD (1e18) and BPS (1e4)
     uint256 internal constant WAD_BPS_RATIO = 1e14;
+    
+    /// @notice Precision used for collateral ratio calculations (1e18)
     uint256 internal constant COLLATERAL_RATIO_PRECISION = 1e18;
+    
+    /// @notice Factor used to add pessimism to calculations
     uint256 internal constant PESSIMISM_FACTOR = 1000;
 
-    // OPS State Variables
-    uint256 internal constant DEFAULT_COLLAT_TARGET_MARGIN = 0.02e18;
-    uint256 internal constant DEFAULT_COLLAT_MAX_MARGIN = 0.005e18;
-    uint256 internal constant LIQUIDATION_WARNING_THRESHOLD = 0.01e18;
+    /// @notice Default target margin for collateral ratio (2%)
+    uint64 internal constant DEFAULT_COLLAT_TARGET_MARGIN = 0.02e18;
+    
+    /// @notice Default maximum margin for collateral ratio (0.5%)
+    uint64 internal constant DEFAULT_COLLAT_MAX_MARGIN = 0.005e18;
+    
+    /// @notice Threshold for liquidation warnings (1%)
+    uint64 internal constant LIQUIDATION_WARNING_THRESHOLD = 0.01e18;
 
-    uint256 public targetCollatRatio; // The LTV we are levering up to
-    uint256 public maxBorrowCollatRatio; // The maximum the protocol will let us borrow
-    uint256 public maxCollatRatio; // Closest to liquidation we'll risk
+    /// @notice Target Loan-to-Value ratio the strategy aims to maintain
+    uint64 public targetLTV;
+    
+    /// @notice Maximum LTV ratio the protocol allows for borrowing
+    uint64 public maxBorrowLTV;
+    
+    /// @notice Maximum LTV ratio before risk of liquidation
+    uint64 public maxLTV;
 
-    uint256 public minAsset;
-    uint256 public minRatio;
-    uint256 public minRewardSell;
-    uint8 public maxIterations;
-
-    bool public initialized;
+    /// @notice Maximum base fee in gwei for tend operations
+    uint16 public maxTendBasefeeGwei = 12;
+    
+    /// @notice Maximum number of iterations for leveraging operations
+    uint8 public maxIterations = 12;
+    
+    /// @notice Minimum ratio difference to trigger position adjustments (0.5%)
+    uint64 public minAdjustRatio = 0.005 ether;
+    
+    /// @notice Minimum amount of asset to process
+    uint96 public minAsset = 100;
+    
+    /// @notice Minimum amount of rewards to sell
+    uint96 public minRewardSell = 1e15;
 
     constructor(
         address _asset,
         string memory _name
     ) BaseHealthCheck(_asset, _name) {}
 
-    function _initStrategy(address _asset) internal virtual {
-        require(!initialized, "already initialized");
-
-        // initialize operational state
-        maxIterations = 12;
-
-        // mins
-        minAsset = 100;
-        minRatio = 0.005 ether;
-        minRewardSell = 1e15;
-
-        initialized = true;
+    /**
+     * @notice Sets the LTV ratios for the strategy
+     * @param _targetLTV Target Loan-to-Value ratio to maintain
+     * @param _maxBorrowLTV Maximum borrowing LTV allowed by the protocol
+     * @param _maxLTV Maximum LTV before liquidation risk
+     * @dev Only callable by management
+     */
+    function setLTVs(
+        uint64 _targetLTV,
+        uint64 _maxBorrowLTV,
+        uint64 _maxLTV
+    ) external virtual onlyManagement {
+        targetLTV = _targetLTV;
+        maxBorrowLTV = _maxBorrowLTV;
+        maxLTV = _maxLTV;
     }
 
-    function setCollatRatios(
-        uint256 _targetCollatRatio,
-        uint256 _maxBorrowCollatRatio,
-        uint256 _maxCollatRatio
-    ) external virtual onlyManagement {
-        targetCollatRatio = _targetCollatRatio;
-        maxBorrowCollatRatio = _maxBorrowCollatRatio;
-        maxCollatRatio = _maxCollatRatio;
+    /**
+     * @notice Sets maximum base fee in gwei for tend operations
+     * @param _maxTendBasefeeGwei Maximum base fee in gwei
+     * @dev Only callable by management
+     */
+    function setMaxTendBasefeeGwei(uint16 _maxTendBasefeeGwei) external onlyManagement {
+        maxTendBasefeeGwei = _maxTendBasefeeGwei;
+    }
+
+    /**
+     * @notice Sets maximum number of iterations for leveraging operations
+     * @param _maxIterations Maximum number of iterations
+     * @dev Only callable by management
+     */
+    function setMaxIterations(uint8 _maxIterations) external onlyManagement {
+        maxIterations = _maxIterations;
+    }
+
+    /**
+     * @notice Sets minimum ratio difference to trigger position adjustments
+     * @param _minAdjustRatio Minimum adjustment ratio in WAD (1e18)
+     * @dev Only callable by management
+     */
+    function setMinAdjustRatio(uint64 _minAdjustRatio) external onlyManagement {
+        minAdjustRatio = _minAdjustRatio;
+    }
+
+    /**
+     * @notice Sets minimum amount of asset to process
+     * @param _minAsset Minimum asset amount
+     * @dev Only callable by management
+     */
+    function setMinAsset(uint96 _minAsset) external onlyManagement {
+        minAsset = _minAsset;
+    }
+
+    /**
+     * @notice Sets minimum amount of rewards to sell
+     * @param _minRewardSell Minimum reward amount
+     * @dev Only callable by management
+     */
+    function setMinRewardSell(uint96 _minRewardSell) external onlyManagement {
+        minRewardSell = _minRewardSell;
     }
 
     /**
@@ -98,13 +145,10 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
 
         // check current LTV
-        uint256 _liveCollatRatio = liveCollatRatio();
+        uint256 _liveLTV = liveLTV();
 
         // we should lever up
-        if (
-            targetCollatRatio > _liveCollatRatio &&
-            targetCollatRatio - _liveCollatRatio > minRatio
-        ) {
+        if (targetLTV > _liveLTV && targetLTV - _liveLTV > minAdjustRatio) {
             _leverMax();
         }
     }
@@ -143,16 +187,13 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         uint256 _currentSupply = _deposits - _borrows;
         uint256 _amountRequired = Math.min(_amount, _currentSupply);
         uint256 _newSupply = _currentSupply - _amountRequired;
-        uint256 _targetCollatRatio = targetCollatRatio;
-        uint256 _newBorrow = getBorrowFromSupply(
-            _newSupply,
-            _targetCollatRatio
-        );
+        uint256 _targetLTV = targetLTV;
+        uint256 _newBorrow = getBorrowFromSupply(_newSupply, _targetLTV);
 
         if (_newBorrow < _borrows) {
             _leverDownTo(_newBorrow, _deposits, _borrows);
             (_deposits, _borrows) = livePosition();
-            _withdrawExcessCollateral(_targetCollatRatio, _deposits, _borrows);
+            _withdrawExcessCollateral(_targetLTV, _deposits, _borrows);
         } else {
             _withdraw(_amount);
         }
@@ -224,25 +265,74 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
 
         (uint256 _deposits, uint256 _borrows) = livePosition();
-        uint256 _currentCollatRatio = getCollatRatio(_deposits, _borrows);
-        uint256 _targetCollatRatio = targetCollatRatio;
-        uint256 _minRatio = minRatio;
+        uint256 _currentLTV = getLTV(_deposits, _borrows);
+        uint256 _targetLTV = uint256(targetLTV);
+        uint256 _minAdjustRatio = uint256(minAdjustRatio);
 
-        if (_currentCollatRatio < _targetCollatRatio) {
+        if (_currentLTV < _targetLTV) {
             // we should lever up
-            if (_targetCollatRatio - _currentCollatRatio > _minRatio) {
+            if (_targetLTV - _currentLTV > _minAdjustRatio) {
                 // we only act on relevant differences
                 _leverMax();
             }
-        } else if (_currentCollatRatio > targetCollatRatio) {
-            if (_currentCollatRatio - _targetCollatRatio > _minRatio) {
+        } else if (_currentLTV > targetLTV) {
+            if (_currentLTV - _targetLTV > _minAdjustRatio) {
                 uint256 newBorrow = getBorrowFromSupply(
                     _deposits - _borrows,
-                    _targetCollatRatio
+                    _targetLTV
                 );
                 _leverDownTo(newBorrow, _deposits, _borrows);
             }
         }
+    }
+
+    /**
+     * @dev Optional trigger to override if tend() will be used by the strategy.
+     * This must be implemented if the strategy hopes to invoke _tend().
+     *
+     * @return . Should return true if tend() should be called by keeper or false if not.
+     *
+     */
+    function _tendTrigger() internal view override returns (bool) {
+        if (TokenizedStrategy.totalAssets() == 0) {
+            return false;
+        }
+
+        uint256 _estimatedLTV = estimatedLTV();
+
+        if (_estimatedLTV == 0) {
+            return false;
+        }
+
+        uint256 _targetLTV = uint256(targetLTV);
+
+        // we must lever down if we are over the warning threshold
+        if (_estimatedLTV >= _targetLTV + LIQUIDATION_WARNING_THRESHOLD) {
+            return true;
+        }
+
+        // All other checks can wait for low gas
+        if (block.basefee >= uint256(maxTendBasefeeGwei) * 1e9) {
+            return false;
+        }
+
+        uint256 _minAdjustRatio = uint256(minAdjustRatio);
+
+        // Tend if ltv is higher than the target range
+        if (_estimatedLTV >= _targetLTV + _minAdjustRatio) {
+            return true;
+        }
+
+        if (TokenizedStrategy.isShutdown()) {
+            return false;
+        }
+
+        // Tend if ltv is lower than target range
+        if (_estimatedLTV <= _targetLTV - _minAdjustRatio) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -277,34 +367,83 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         if (_borrows == 0) _withdraw(Math.min(_deposits, _amount));
     }
 
+    /**
+     * @notice Deposits asset tokens into the lending platform
+     * @param _amount Amount of asset tokens to deposit
+     * @dev Must be implemented by the specific lending platform integration
+     */
     function _deposit(uint256 _amount) internal virtual {}
 
+    /**
+     * @notice Withdraws asset tokens from the lending platform
+     * @param _amount Amount of asset tokens to withdraw
+     * @return Amount of asset tokens actually withdrawn
+     * @dev Must be implemented by the specific lending platform integration
+     */
     function _withdraw(uint256 _amount) internal virtual returns (uint256) {}
 
+    /**
+     * @notice Borrows asset tokens from the lending platform
+     * @param _amount Amount of asset tokens to borrow
+     * @dev Must be implemented by the specific lending platform integration
+     */
     function _borrow(uint256 _amount) internal virtual {}
 
+    /**
+     * @notice Repays borrowed asset tokens to the lending platform
+     * @param _amount Amount of asset tokens to repay
+     * @return Amount of asset tokens actually repaid
+     * @dev Must be implemented by the specific lending platform integration
+     */
     function _repay(uint256 _amount) internal virtual returns (uint256) {}
 
+    /**
+     * @notice Claims any available rewards from the lending platform
+     * @dev Must be implemented by the specific lending platform integration
+     */
     function _claimRewards() internal virtual {}
 
+    /**
+     * @notice Sells claimed reward tokens for the strategy's asset token
+     * @dev Must be implemented by the specific lending platform integration
+     */
     function _sellRewards() internal virtual {}
 
+    /**
+     * @notice Estimates the value of reward tokens in terms of asset tokens
+     * @param _token Address of the reward token
+     * @param _amount Amount of reward tokens
+     * @return Estimated value in asset tokens
+     * @dev Must be implemented by the specific lending platform integration
+     */
     function _estimateTokenToAsset(
         address _token,
         uint256 _amount
     ) internal view virtual returns (uint256) {}
 
+    /**
+     * @notice Leverages the position up to the target LTV ratio
+     * @dev Calculates required borrowing and executes leveraging in iterations
+     */
     function _leverMax() internal {
         (uint256 deposits, uint256 borrows) = livePosition();
         uint256 assetBalance = balanceOfAsset();
 
         uint256 realSupply = deposits - borrows + assetBalance;
-        uint256 newBorrow = getBorrowFromSupply(realSupply, targetCollatRatio);
+        uint256 newBorrow = getBorrowFromSupply(realSupply, targetLTV);
         uint256 totalAmountToBorrow = newBorrow - borrows;
 
         _leverUpTo(totalAmountToBorrow, assetBalance, deposits, borrows);
     }
 
+    /**
+     * @notice Executes leveraging up to a target borrowed amount
+     * @param totalAmountToBorrow Total amount to borrow through leveraging
+     * @param assetBalance Current balance of asset token
+     * @param deposits Current deposits in lending platform
+     * @param borrows Current borrows from lending platform
+     * @dev Executes leveraging in iterations up to maxIterations
+     */
     function _leverUpTo(
         uint256 totalAmountToBorrow,
         uint256 assetBalance,
@@ -324,7 +463,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             // calculate how much borrow to take
             uint256 canBorrow = getBorrowFromDeposit(
                 deposits + assetBalance,
-                maxBorrowCollatRatio
+                maxBorrowLTV
             );
 
             if (canBorrow <= borrows) {
@@ -353,6 +492,13 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
     }
 
+    /**
+     * @notice Reduces leverage down to a target borrowed amount
+     * @param _targetAmountBorrowed Target amount to maintain borrowed
+     * @param _deposits Current deposits in lending platform
+     * @param _borrows Current borrows from lending platform
+     * @dev Executes deleveraging in iterations up to maxIterations
+     */
     function _leverDownTo(
         uint256 _targetAmountBorrowed,
         uint256 _deposits,
@@ -364,7 +510,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             uint256 _assetBalance = balanceOfAsset();
             uint256 _remainingRepayAmount = _borrows - _targetAmountBorrowed;
 
-            uint256 _maxCollatRatio = maxCollatRatio;
+            uint256 _maxLTV = maxLTV;
             uint8 _maxIterations = maxIterations;
 
             for (
@@ -373,7 +519,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
                 i++
             ) {
                 uint256 _withdrawn = _withdrawExcessCollateral(
-                    _maxCollatRatio,
+                    _maxLTV,
                     _deposits,
                     _borrows
                 );
@@ -394,12 +540,9 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
 
         //(deposits, borrows) = livePosition();
-        // deposit back to get targetCollatRatio (we always need to leave this in this ratio)
-        uint256 _targetCollatRatio = targetCollatRatio;
-        uint256 _targetDeposit = getDepositFromBorrow(
-            _borrows,
-            _targetCollatRatio
-        );
+        // deposit back to get targetLTV (we always need to leave this in this ratio)
+        uint256 _targetLTV = targetLTV;
+        uint256 _targetDeposit = getDepositFromBorrow(_borrows, _targetLTV);
         if (_targetDeposit > _deposits) {
             uint256 _toDeposit = _targetDeposit - _deposits;
             if (_toDeposit > _minAsset) {
@@ -408,6 +551,13 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
     }
 
+    /**
+     * @notice Withdraws excess collateral above target ratio
+     * @param collatRatio Target collateral ratio to maintain
+     * @param deposits Current deposits in lending platform
+     * @param borrows Current borrows from lending platform
+     * @return amount Amount of collateral withdrawn
+     */
     function _withdrawExcessCollateral(
         uint256 collatRatio,
         uint256 deposits,
@@ -420,10 +570,21 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
     }
 
+    /**
+     * @notice Gets the current balance of asset token held by this contract
+     * @return Current balance of asset token
+     */
     function balanceOfAsset() internal view returns (uint256) {
         return ERC20(asset).balanceOf(address(this));
     }
 
+    /**
+     * @notice Returns the estimated deposits and borrows from the lending platform
+     * @return deposits Estimated amount of asset tokens deposited
+     * @return borrows Estimated amount of asset tokens borrowed
+     * @dev Must be implemented by the specific lending platform integration
+     *      Should use view functions to estimate position without state changes
+     */
     function estimatedPosition()
         public
         view
@@ -431,24 +592,27 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         returns (uint256 deposits, uint256 borrows)
     {}
 
+    /**
+     * @notice Returns the current deposits and borrows from the lending platform
+     * @return deposits Current amount of asset tokens deposited
+     * @return borrows Current amount of asset tokens borrowed
+     * @dev Must be implemented by the specific lending platform integration
+     *      May perform state changes to sync and get accurate position
+     */
     function livePosition()
         public
         virtual
         returns (uint256 deposits, uint256 borrows)
     {}
 
-    function estimatedCollatRatio()
-        public
-        view
-        returns (uint256 _estimatedCollatRatio)
-    {
+    function estimatedLTV() public view returns (uint256 _estimatedLTV) {
         (uint256 deposits, uint256 borrows) = estimatedPosition();
-        _estimatedCollatRatio = getCollatRatio(deposits, borrows);
+        _estimatedLTV = getLTV(deposits, borrows);
     }
 
-    function liveCollatRatio() public returns (uint256 _liveCollatRatio) {
+    function liveLTV() public returns (uint256 _liveLTV) {
         (uint256 deposits, uint256 borrows) = livePosition();
-        _liveCollatRatio = getCollatRatio(deposits, borrows);
+        _liveLTV = getLTV(deposits, borrows);
     }
 
     function estimatedTotalAssets() public view returns (uint256 _totalAssets) {
@@ -458,6 +622,12 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         _totalAssets += (estimatedRewardsInAsset() * 9000) / 10000;
     }
 
+    /**
+     * @notice Estimates the value of unclaimed rewards in terms of asset tokens
+     * @return _rewardsInWant Estimated value of unclaimed rewards in asset tokens
+     * @dev Must be implemented by the specific lending platform integration
+     *      Should account for all types of rewards and their current market prices
+     */
     function estimatedRewardsInAsset()
         public
         view
@@ -467,7 +637,13 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
 
     // Section: LTV Math
 
-    function getCollatRatio(
+    /**
+     * @notice Calculates the Loan-to-Value ratio
+     * @param deposits Amount of deposits
+     * @param borrows Amount of borrows
+     * @return Current LTV ratio in COLLATERAL_RATIO_PRECISION
+     */
+    function getLTV(
         uint256 deposits,
         uint256 borrows
     ) internal pure returns (uint256) {
@@ -477,6 +653,12 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         return (borrows * COLLATERAL_RATIO_PRECISION) / deposits;
     }
 
+    /**
+     * @notice Calculates how much can be borrowed given a deposit amount and collateral ratio
+     * @param deposit Amount of deposits
+     * @param collatRatio Target collateral ratio
+     * @return Maximum amount that can be borrowed
+     */
     function getBorrowFromDeposit(
         uint256 deposit,
         uint256 collatRatio
@@ -485,6 +667,12 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         return (deposit * collatRatio) / COLLATERAL_RATIO_PRECISION;
     }
 
+    /**
+     * @notice Calculates required deposit amount for a given borrow amount and collateral ratio
+     * @param borrow Amount borrowed
+     * @param collatRatio Target collateral ratio
+     * @return Required deposit amount
+     */
     function getDepositFromBorrow(
         uint256 borrow,
         uint256 collatRatio
@@ -493,6 +681,12 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         return (borrow * COLLATERAL_RATIO_PRECISION) / collatRatio;
     }
 
+    /**
+     * @notice Calculates optimal borrow amount given supply and target collateral ratio
+     * @param supply Total supply amount
+     * @param collatRatio Target collateral ratio
+     * @return Optimal borrow amount
+     */
     function getBorrowFromSupply(
         uint256 supply,
         uint256 collatRatio

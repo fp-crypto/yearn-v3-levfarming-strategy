@@ -2,12 +2,10 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console.sol";
-import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
+import {Setup, ERC20} from "./utils/Setup.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract OperationTest is Setup {
-    uint256 public constant REPORTING_PERIOD = 7 days;
-
     function setUp() public virtual override {
         super.setUp();
     }
@@ -242,19 +240,19 @@ contract OperationTest is Setup {
     ) public {
         _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
         _startingLtv = uint64(
-            bound(_startingLtv, 0, strategy.targetCollatRatio())
+            bound(_startingLtv, 0, strategy.targetLTV())
         );
-        _endingLtv = uint64(bound(_endingLtv, 0, strategy.targetCollatRatio()));
+        _endingLtv = uint64(bound(_endingLtv, 0, strategy.targetLTV()));
         //vm.assume(
         //    Helpers.abs(int64(strategy.ltvs().targetLTV) - int64(_endingLtv)) >
         //        strategy.ltvs().minAdjustThreshold
         //); // change must be more than the minimum adjustment threshold
 
         vm.startPrank(management);
-        strategy.setCollatRatios(
+        strategy.setLTVs(
             _startingLtv,
-            strategy.maxBorrowCollatRatio(),
-            strategy.maxCollatRatio()
+            strategy.maxBorrowLTV(),
+            strategy.maxLTV()
         );
         vm.stopPrank();
 
@@ -274,10 +272,10 @@ contract OperationTest is Setup {
         skip(1 days);
 
         vm.startPrank(management);
-        strategy.setCollatRatios(
+        strategy.setLTVs(
             _endingLtv,
-            strategy.maxBorrowCollatRatio(),
-            strategy.maxCollatRatio()
+            strategy.maxBorrowLTV(),
+            strategy.maxLTV()
         );
         vm.stopPrank();
 

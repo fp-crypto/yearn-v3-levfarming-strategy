@@ -1,12 +1,10 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console.sol";
-import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
+import {Setup} from "./utils/Setup.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract ShutdownTest is Setup {
-    uint256 public constant REPORTING_PERIOD = 7 days;
-
     function setUp() public virtual override {
         super.setUp();
         setFees(0, 0); // set fees to 0 to make life easy

@@ -11,6 +11,8 @@ contract LevAaveStrategyFactory {
     event NewStrategy(address indexed strategy, address indexed asset);
 
     address public constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
+    address public constant AAVE_ADDRESSES_PROVDIER =
+        0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
 
     address public keeper;
 
@@ -25,22 +27,31 @@ contract LevAaveStrategyFactory {
      * @notice Deploy a new strategy
      * @dev This will set the msg.sender to all of the permissioned roles.
      */
+
+    /**
+     * @notice Deploy a new strategy
+     * @dev This will set the msg.sender to all of the permissioned roles.
+     */
+    function newStrategy(address _asset, string memory _name) external returns (address) {
+        return newStrategy(_asset, _name, AAVE_ADDRESSES_PROVDIER);
+    }
+
+    /**
+     * @notice Deploy a new strategy
+     * @dev This will set the msg.sender to all of the permissioned roles.
+     */
     function newStrategy(
         address _asset,
-        string memory _name
-    ) external returns (address) {
+        string memory _name,
+        address _addressProvider
+    ) public returns (address) {
         if (deployments[_asset] != address(0))
             revert AlreadyDeployed(deployments[_asset]);
 
         // We need to use the custom interface with the
         // tokenized strategies available setters.
         IStrategyInterface _newStrategy = IStrategyInterface(
-            address(
-                new LevAaveStrategy(
-                    _asset,
-                    _name
-                )
-            )
+            address(new LevAaveStrategy(_asset, _name, _addressProvider))
         );
 
         _newStrategy.setKeeper(keeper);

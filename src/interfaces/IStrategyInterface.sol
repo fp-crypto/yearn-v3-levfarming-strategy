@@ -4,21 +4,21 @@ pragma solidity ^0.8.18;
 import {IBaseHealthCheck} from "@periphery/Bases/HealthCheck/IBaseHealthCheck.sol";
 
 interface IStrategyInterface is IBaseHealthCheck {
-    function targetCollatRatio() external returns (uint256);
+    function targetLTV() external returns (uint64);
 
-    function maxBorrowCollatRatio() external returns (uint256);
+    function maxBorrowLTV() external returns (uint64);
 
-    function maxCollatRatio() external returns (uint256);
+    function maxLTV() external returns (uint64);
 
-    function minAsset() external returns (uint256);
+    function minAsset() external returns (uint96);
 
-    function minRatio() external returns (uint256);
+    function minAdjustRatio() external returns (uint64);
 
-    function minRewardSell() external returns (uint256);
+    function minRewardSell() external returns (uint96);
 
     function maxIterations() external returns (uint8);
 
-    function initialized() external returns (bool);
+    function maxTendBasefeeGwei() external returns (uint16);
 
     function estimatedPosition()
         external
@@ -29,21 +29,28 @@ interface IStrategyInterface is IBaseHealthCheck {
         external
         returns (uint256 deposits, uint256 borrows);
 
-    function estimatedCollatRatio()
-        external
-        view
-        returns (uint256 _estimatedCollatRatio);
+    function estimatedLTV() external view returns (uint256 _estimatedLTV);
 
-    function liveCollatRatio() external returns (uint256 _liveCollatRatio);
+    function liveLTV() external returns (uint256 _liveLTV);
 
     function estimatedTotalAssets()
         external
         view
         returns (uint256 _totalAssets);
 
-    function setCollatRatios(
-        uint256 _targetCollatRatio,
-        uint256 _maxBorrowCollatRatio,
-        uint256 _maxCollatRatio
+    function setLTVs(
+        uint64 _targetLTV,
+        uint64 _maxBorrowLTV,
+        uint64 _maxLTV
     ) external;
+
+    function setMaxTendBasefeeGwei(uint16 _maxTendBasefeeGwei) external;
+
+    function setMaxIterations(uint8 _maxIterations) external;
+
+    function setMinAdjustRatio(uint64 _minAdjustRatio) external;
+
+    function setMinAsset(uint96 _minAsset) external;
+
+    function setMinRewardSell(uint96 _minRewardSell) external;
 }

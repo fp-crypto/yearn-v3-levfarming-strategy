@@ -6,7 +6,7 @@ import {ExtendedTest} from "./ExtendedTest.sol";
 
 import {LevAaveStrategy as Strategy, ERC20} from "../../LevAaveStrategy.sol";
 import {LevAaveStrategyFactory as StrategyFactory} from "../../LevAaveStrategyFactory.sol";
-import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
+import {ILevAaveStrategyInterface} from "../../interfaces/ILevAaveStrategyInterface.sol";
 
 import {IACLManager} from "../../interfaces/aave/v3/core/IACLManager.sol";
 import {IPoolConfigurator} from "../../interfaces/aave/v3/core/IPoolConfigurator.sol";
@@ -25,7 +25,7 @@ interface IFactory {
 contract Setup is ExtendedTest, IEvents {
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
-    IStrategyInterface public strategy;
+    ILevAaveStrategyInterface public strategy;
 
     mapping(string => address) public tokenAddrs;
 
@@ -44,10 +44,11 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public MAX_BPS = 10_000;
 
     uint256 public maxFuzzAmount = 100_000e18;
-    uint256 public minFuzzAmount = 1_000e18;
+    uint256 public minFuzzAmount = 1000e18;
 
-    // Default profit max unlock time is set for 10 days
-    uint256 public profitMaxUnlockTime = 10 days;
+    uint256 public profitMaxUnlockTime = 1 hours;
+    
+    uint256 public constant REPORTING_PERIOD = 7 days;
 
     function setUp() public virtual {
         _setTokenAddrs();
@@ -57,13 +58,13 @@ contract Setup is ExtendedTest, IEvents {
 
         vm.prank(0x5300A1a15135EA4dc7aD5a167152C01EFc9b192A);
         IPoolConfigurator(0x64b761D848206f447Fe2dd461b0c635Ec39EbB27)
-            .setSupplyCap(address(asset), 0);
+             .setSupplyCap(address(asset), 0);
 
         // Set decimals
         decimals = asset.decimals();
 
         // Deploy strategy and set variables
-        strategy = IStrategyInterface(setUpStrategy());
+        strategy = ILevAaveStrategyInterface(setUpStrategy());
 
         factory = strategy.FACTORY();
 
@@ -82,8 +83,8 @@ contract Setup is ExtendedTest, IEvents {
     function setUpStrategy() public returns (address) {
         StrategyFactory _strategyFactory = new StrategyFactory(keeper);
 
-        // we save the strategy as a IStrategyInterface to give it the needed interface
-        IStrategyInterface _strategy = IStrategyInterface(
+        // we save the strategy as a ILevAaveStrategyInterface to give it the needed interface
+        ILevAaveStrategyInterface _strategy = ILevAaveStrategyInterface(
             address(
                 _strategyFactory.newStrategy(
                     address(asset),
@@ -102,13 +103,14 @@ contract Setup is ExtendedTest, IEvents {
         _strategy.setPendingManagement(management);
         // set deposit limit
         // _strategy.setDepositLimit(2 ** 256 - 1);
+        _strategy.setProfitMaxUnlockTime(profitMaxUnlockTime);
         vm.stopPrank();
 
         return address(_strategy);
     }
 
     function depositIntoStrategy(
-        IStrategyInterface _strategy,
+        ILevAaveStrategyInterface _strategy,
         address _user,
         uint256 _amount
     ) public {
@@ -120,7 +122,7 @@ contract Setup is ExtendedTest, IEvents {
     }
 
     function mintAndDepositIntoStrategy(
-        IStrategyInterface _strategy,
+        ILevAaveStrategyInterface _strategy,
         address _user,
         uint256 _amount
     ) public {
@@ -129,13 +131,13 @@ contract Setup is ExtendedTest, IEvents {
     }
 
     function totalIdle(
-        IStrategyInterface _strategy
+        ILevAaveStrategyInterface _strategy
     ) public view returns (uint256) {
         return ERC20(_strategy.asset()).balanceOf(address(_strategy));
     }
 
     function totalDebt(
-        IStrategyInterface _strategy
+        ILevAaveStrategyInterface _strategy
     ) public view returns (uint256) {
         uint256 _totalIdle = totalIdle(_strategy);
         uint256 _totalAssets = _strategy.totalAssets();
@@ -145,7 +147,7 @@ contract Setup is ExtendedTest, IEvents {
 
     // For checking the amounts in the strategy
     function checkStrategyTotals(
-        IStrategyInterface _strategy,
+        ILevAaveStrategyInterface _strategy,
         uint256 _totalAssets,
         uint256 _totalDebt,
         uint256 _totalIdle
@@ -188,26 +190,26 @@ contract Setup is ExtendedTest, IEvents {
     }
 
     function checkLTV(bool canBeZero, bool onlyCheckTooHigh) public {
-        checkLTV(canBeZero, onlyCheckTooHigh, strategy.targetCollatRatio());
+        checkLTV(canBeZero, onlyCheckTooHigh, strategy.targetLTV());
     }
 
     function checkLTV(
         bool canBeZero,
         bool onlyCheckTooHigh,
-        uint256 targetLTV
+        uint64 targetLTV
     ) public {
-        if (canBeZero && strategy.liveCollatRatio() == 0) return;
+        if (canBeZero && strategy.liveLTV() == 0) return;
         if (onlyCheckTooHigh) {
             assertLe(
-                strategy.liveCollatRatio(),
-                targetLTV + strategy.minRatio(),
+                strategy.liveLTV(),
+                targetLTV + strategy.minAdjustRatio(),
                 "!LTV too high"
             );
         } else {
             assertApproxEq(
-                strategy.liveCollatRatio(),
+                strategy.liveLTV(),
                 targetLTV,
-                strategy.minRatio(),
+                strategy.minAdjustRatio(),
                 "!LTV not target"
             );
         }
@@ -221,13 +223,14 @@ contract Setup is ExtendedTest, IEvents {
         console.log("Collateral: %e", _borrows);
         console.log(
             "LTV (actual/target): %e/%e",
-            strategy.liveCollatRatio(),
-            strategy.targetCollatRatio()
+            strategy.liveLTV(),
+            strategy.targetLTV()
         );
         console.log("ETA: %e", strategy.estimatedTotalAssets());
         console.log("Total Assets: %e", strategy.totalAssets());
         console.log("Total Debt: %e", totalDebt(strategy));
         console.log("Total Idle: %e", totalIdle(strategy));
+        console.log("\n");
     }
 
     function _setTokenAddrs() internal {
