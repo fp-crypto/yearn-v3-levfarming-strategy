@@ -32,8 +32,8 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
     uint16 private constant REFERRAL = 0;
 
     // Supply and borrow tokens
-    IAToken public aToken;
-    IVariableDebtToken public debtToken;
+    IAToken public immutable A_TOKEN;
+    IVariableDebtToken public immutable DEBT_TOKEN;
     address[] private rewardTokens;
 
     /// @notice Initializes the strategy with required addresses and settings
@@ -60,8 +60,8 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         (address _aToken, , address _debtToken) = PROTOCOL_DATA_PROVIDER
             .getReserveTokensAddresses(address(asset));
 
-        aToken = IAToken(_aToken);
-        debtToken = IVariableDebtToken(_debtToken);
+        A_TOKEN = IAToken(_aToken);
+        DEBT_TOKEN = IVariableDebtToken(_debtToken);
 
         //_setEMode(true); // use emode if it's available
         // Set collateral targets
@@ -162,7 +162,7 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         address[] memory _tokens = new address[](1);
         _tokens[0] = address(asset);
         uint256[] memory _amounts = new uint256[](1);
-        _amounts[0] = Math.min(_amount, asset.balanceOf(address(aToken))); // max loanable is the _amount of asset held by aave
+        _amounts[0] = Math.min(_amount, asset.balanceOf(address(A_TOKEN))); // max loanable is the _amount of asset held by aave
         uint256[] memory _modes = new uint256[](1);
         _modes[0] = 2;
         POOL.flashLoan(
@@ -239,8 +239,8 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
     function _claimRewards() internal override {
         IRewardsController _rewardsController = REWARDS_CONTROLLER;
         address[] memory assets = new address[](2);
-        assets[0] = address(aToken);
-        assets[1] = address(debtToken);
+        assets[0] = address(A_TOKEN);
+        assets[1] = address(DEBT_TOKEN);
         _rewardsController.claimAllRewards(assets, address(this));
     }
 
@@ -273,8 +273,8 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         view
         returns (uint256 deposits, uint256 borrows)
     {
-        deposits = aToken.balanceOf(address(this));
-        borrows = ERC20(address(debtToken)).balanceOf(address(this));
+        deposits = A_TOKEN.balanceOf(address(this));
+        borrows = ERC20(address(DEBT_TOKEN)).balanceOf(address(this));
     }
 
     /// @inheritdoc BaseLevFarmingStrategy

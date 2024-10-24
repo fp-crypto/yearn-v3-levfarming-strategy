@@ -10,9 +10,9 @@ interface ILevAaveStrategyInterface is IStrategyInterface {
 
     function flashloanEnabled() external returns (bool);
 
-    function aToken() external returns (address);
+    function A_TOKEN() external returns (address);
 
-    function debtToken() external returns (address);
+    function DEBT_TOKEN() external returns (address);
 
     function setFlashloanEnabled(bool _flashloanEnabled) external;
 }

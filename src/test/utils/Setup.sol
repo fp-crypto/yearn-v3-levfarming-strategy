@@ -47,7 +47,7 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public minFuzzAmount = 1000e18;
 
     uint256 public profitMaxUnlockTime = 1 hours;
-    
+
     uint256 public constant REPORTING_PERIOD = 7 days;
 
     function setUp() public virtual {
@@ -58,7 +58,7 @@ contract Setup is ExtendedTest, IEvents {
 
         vm.prank(0x5300A1a15135EA4dc7aD5a167152C01EFc9b192A);
         IPoolConfigurator(0x64b761D848206f447Fe2dd461b0c635Ec39EbB27)
-             .setSupplyCap(address(asset), 0);
+            .setSupplyCap(address(asset), 0);
 
         // Set decimals
         decimals = asset.decimals();
@@ -72,8 +72,8 @@ contract Setup is ExtendedTest, IEvents {
         vm.label(keeper, "keeper");
         vm.label(factory, "factory");
         vm.label(address(asset), "asset");
-        vm.label(address(Strategy(address(strategy)).aToken()), "aToken");
-        vm.label(address(Strategy(address(strategy)).debtToken()), "debtToken");
+        vm.label(strategy.A_TOKEN(), "aToken");
+        vm.label(strategy.DEBT_TOKEN(), "debtToken");
         vm.label(tokenAddrs["WETH"], "WETH");
         vm.label(management, "management");
         vm.label(address(strategy), "strategy");
