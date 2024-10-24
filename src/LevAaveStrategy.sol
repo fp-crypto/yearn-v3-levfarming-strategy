@@ -212,8 +212,6 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         maxBorrowLTV = uint64(ltv) - DEFAULT_COLLAT_MAX_MARGIN;
     }
 
-    // flashloan callback
-
     /// @notice Callback function called by Aave after flash loan
     /// @dev This function is called after your contract has received the flash loaned amount
     /// @param assets The addresses of the assets being flash-borrowed

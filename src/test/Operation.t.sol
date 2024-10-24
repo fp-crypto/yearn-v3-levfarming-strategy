@@ -6,21 +6,36 @@ import {Setup, ERC20} from "./utils/Setup.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract OperationTest is Setup {
+    /// @notice Set up the test environment with zero fees
     function setUp() public virtual override {
         super.setUp();
         setFees(0, 0);
+
+        // Verify initial state
+        assertEq(strategy.totalAssets(), 0, "Initial total assets should be 0");
+        assertEq(strategy.totalSupply(), 0, "Initial total supply should be 0");
     }
 
+    /// @notice Test initial strategy setup and configuration
     function test_setupStrategyOK() public {
         console.log("address of strategy", address(strategy));
-        assertTrue(address(0) != address(strategy));
-        assertEq(strategy.asset(), address(asset));
-        assertEq(strategy.management(), management);
-        assertEq(strategy.performanceFeeRecipient(), performanceFeeRecipient);
-        assertEq(strategy.keeper(), keeper);
-        // TODO: add additional check on strat params
+        assertTrue(
+            address(0) != address(strategy),
+            "Strategy address should not be zero"
+        );
+        assertEq(strategy.asset(), address(asset), "Wrong asset address");
+        assertEq(strategy.management(), management, "Wrong management address");
+        assertEq(
+            strategy.performanceFeeRecipient(),
+            performanceFeeRecipient,
+            "Wrong fee recipient"
+        );
+        assertEq(strategy.keeper(), keeper, "Wrong keeper address");
     }
 
+    /// @notice Test basic deposit and withdrawal flow
+    /// @param _amount The amount to deposit
+    /// @param _noFlashloans Whether to disable flashloans
     function test_operation(uint256 _amount, bool _noFlashloans) public {
         _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
 
@@ -69,6 +84,9 @@ contract OperationTest is Setup {
         logStrategyInfo();
     }
 
+    /// @notice Test strategy reporting with profits
+    /// @param _amount The amount to deposit
+    /// @param _noFlashloans Whether to disable flashloans
     function test_profitableReport(uint256 _amount, bool _noFlashloans) public {
         _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
 
