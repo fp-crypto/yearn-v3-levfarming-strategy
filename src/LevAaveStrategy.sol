@@ -12,8 +12,6 @@ import {DataTypes} from "./interfaces/aave/v3/core/DataTypes.sol";
 import {IFlashLoanReceiver} from "./interfaces/aave/v3/core/IFlashLoanReceiver.sol";
 import {IRewardsController} from "./interfaces/aave/v3/periphery/IRewardsController.sol";
 
-import "forge-std/console.sol"; // TODO: DELETE
-
 /// @title Leveraged Aave Strategy
 /// @notice A strategy that uses Aave V3 for leveraged lending/borrowing
 /// @dev Implements flash loans and leveraged positions using Aave V3 protocol
@@ -156,6 +154,9 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         _repayWithATokens(_borrows - _targetAmountBorrowed);
     }
 
+    /// @notice Executes a flash loan for the specified amount
+    /// @param _amount The amount to flash loan
+    /// @dev Uses mode 2 (variable rate) for the flash loan
     function _flashloan(uint256 _amount) internal {
         if (_amount == 0) return;
         address[] memory _tokens = new address[](1);
@@ -201,6 +202,8 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
     //     POOL.setUserEMode(_enableEmode ? _emodeCategory : 0);
     // }
 
+    /// @notice Automatically configures the LTV ratios based on protocol settings
+    /// @dev Sets targetLTV, maxLTV and maxBorrowLTV using protocol values and safety margins
     function _autoConfigureLTVs() internal {
         (uint256 ltv, uint256 liquidationThreshold) = getProtocolLTVs();
         require(ltv > DEFAULT_COLLAT_TARGET_MARGIN); // dev: !ltv
@@ -267,6 +270,9 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         (deposits, borrows) = _currentPosition();
     }
 
+    /// @notice Gets the current position of deposits and borrows
+    /// @return deposits The current amount of aTokens held
+    /// @return borrows The current amount of debt tokens
     function _currentPosition()
         internal
         view
