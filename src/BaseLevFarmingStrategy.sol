@@ -59,7 +59,6 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @notice Minimum amount of rewards to sell
     uint96 public minRewardSell = 1e15;
 
-    /// @inheritdoc BaseStrategy
     constructor(
         address _asset,
         string memory _name
