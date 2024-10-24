@@ -82,49 +82,39 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         maxLTV = _maxLTV;
     }
 
-    /**
-     * @notice Sets maximum base fee in gwei for tend operations
-     * @param _maxTendBasefeeGwei Maximum base fee in gwei
-     * @dev Only callable by management
-     */
+    /// @notice Sets maximum base fee in gwei for tend operations
+    /// @param _maxTendBasefeeGwei Maximum base fee in gwei
+    /// @dev Only callable by management
     function setMaxTendBasefeeGwei(
         uint16 _maxTendBasefeeGwei
     ) external onlyManagement {
         maxTendBasefeeGwei = _maxTendBasefeeGwei;
     }
 
-    /**
-     * @notice Sets maximum number of iterations for leveraging operations
-     * @param _maxIterations Maximum number of iterations
-     * @dev Only callable by management
-     */
+    /// @notice Sets maximum number of iterations for leveraging operations
+    /// @param _maxIterations Maximum number of iterations
+    /// @dev Only callable by management
     function setMaxIterations(uint8 _maxIterations) external onlyManagement {
         maxIterations = _maxIterations;
     }
 
-    /**
-     * @notice Sets minimum ratio difference to trigger position adjustments
-     * @param _minAdjustRatio Minimum adjustment ratio in WAD (1e18)
-     * @dev Only callable by management
-     */
+    /// @notice Sets minimum ratio difference to trigger position adjustments
+    /// @param _minAdjustRatio Minimum adjustment ratio in WAD (1e18)
+    /// @dev Only callable by management
     function setMinAdjustRatio(uint64 _minAdjustRatio) external onlyManagement {
         minAdjustRatio = _minAdjustRatio;
     }
 
-    /**
-     * @notice Sets minimum amount of asset to process
-     * @param _minAsset Minimum asset amount
-     * @dev Only callable by management
-     */
+    /// @notice Sets minimum amount of asset to process
+    /// @param _minAsset Minimum asset amount
+    /// @dev Only callable by management
     function setMinAsset(uint96 _minAsset) external onlyManagement {
         minAsset = _minAsset;
     }
 
-    /**
-     * @notice Sets minimum amount of rewards to sell
-     * @param _minRewardSell Minimum reward amount
-     * @dev Only callable by management
-     */
+    /// @notice Sets minimum amount of rewards to sell
+    /// @param _minRewardSell Minimum reward amount
+    /// @dev Only callable by management
     function setMinRewardSell(uint96 _minRewardSell) external onlyManagement {
         minRewardSell = _minRewardSell;
     }
@@ -271,64 +261,48 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         if (_borrows == 0) _withdraw(Math.min(_deposits, _amount));
     }
 
-    /**
-     * @notice Deposits asset tokens into the lending platform
-     * @param _amount Amount of asset tokens to deposit
-     * @dev Must be implemented by the specific lending platform integration
-     */
+    /// @notice Deposits asset tokens into the lending platform
+    /// @param _amount Amount of asset tokens to deposit
+    /// @dev Must be implemented by the specific lending platform integration
     function _deposit(uint256 _amount) internal virtual {}
 
-    /**
-     * @notice Withdraws asset tokens from the lending platform
-     * @param _amount Amount of asset tokens to withdraw
-     * @return Amount of asset tokens actually withdrawn
-     * @dev Must be implemented by the specific lending platform integration
-     */
+    /// @notice Withdraws asset tokens from the lending platform
+    /// @param _amount Amount of asset tokens to withdraw
+    /// @return Amount of asset tokens actually withdrawn
+    /// @dev Must be implemented by the specific lending platform integration
     function _withdraw(uint256 _amount) internal virtual returns (uint256) {}
 
-    /**
-     * @notice Borrows asset tokens from the lending platform
-     * @param _amount Amount of asset tokens to borrow
-     * @dev Must be implemented by the specific lending platform integration
-     */
+    /// @notice Borrows asset tokens from the lending platform
+    /// @param _amount Amount of asset tokens to borrow
+    /// @dev Must be implemented by the specific lending platform integration
     function _borrow(uint256 _amount) internal virtual {}
 
-    /**
-     * @notice Repays borrowed asset tokens to the lending platform
-     * @param _amount Amount of asset tokens to repay
-     * @return Amount of asset tokens actually repaid
-     * @dev Must be implemented by the specific lending platform integration
-     */
+    /// @notice Repays borrowed asset tokens to the lending platform
+    /// @param _amount Amount of asset tokens to repay
+    /// @return Amount of asset tokens actually repaid
+    /// @dev Must be implemented by the specific lending platform integration
     function _repay(uint256 _amount) internal virtual returns (uint256) {}
 
-    /**
-     * @notice Claims any available rewards from the lending platform
-     * @dev Must be implemented by the specific lending platform integration
-     */
+    /// @notice Claims any available rewards from the lending platform
+    /// @dev Must be implemented by the specific lending platform integration
     function _claimRewards() internal virtual {}
 
-    /**
-     * @notice Sells claimed reward tokens for the strategy's asset token
-     * @dev Must be implemented by the specific lending platform integration
-     */
+    /// @notice Sells claimed reward tokens for the strategy's asset token
+    /// @dev Must be implemented by the specific lending platform integration
     function _sellRewards() internal virtual {}
 
-    /**
-     * @notice Estimates the value of reward tokens in terms of asset tokens
-     * @param _token Address of the reward token
-     * @param _amount Amount of reward tokens
-     * @return Estimated value in asset tokens
-     * @dev Must be implemented by the specific lending platform integration
-     */
+    /// @notice Estimates the value of reward tokens in terms of asset tokens
+    /// @param _token Address of the reward token
+    /// @param _amount Amount of reward tokens
+    /// @return Estimated value in asset tokens
+    /// @dev Must be implemented by the specific lending platform integration
     function _estimateTokenToAsset(
         address _token,
         uint256 _amount
     ) internal view virtual returns (uint256) {}
 
-    /**
-     * @notice Leverages the position up to the target LTV ratio
-     * @dev Calculates required borrowing and executes leveraging in iterations
-     */
+    /// @notice Leverages the position up to the target LTV ratio
+    /// @dev Calculates required borrowing and executes leveraging in iterations
     function _leverMax() internal {
         (uint256 deposits, uint256 borrows) = livePosition();
         uint256 assetBalance = balanceOfAsset();
@@ -340,14 +314,12 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         _leverUpTo(totalAmountToBorrow, assetBalance, deposits, borrows);
     }
 
-    /**
-     * @notice Executes leveraging up to a target borrowed amount
-     * @param totalAmountToBorrow Total amount to borrow through leveraging
-     * @param assetBalance Current balance of asset token
-     * @param deposits Current deposits in lending platform
-     * @param borrows Current borrows from lending platform
-     * @dev Executes leveraging in iterations up to maxIterations
-     */
+    /// @notice Executes leveraging up to a target borrowed amount
+    /// @param totalAmountToBorrow Total amount to borrow through leveraging
+    /// @param assetBalance Current balance of asset token
+    /// @param deposits Current deposits in lending platform
+    /// @param borrows Current borrows from lending platform
+    /// @dev Executes leveraging in iterations up to maxIterations
     function _leverUpTo(
         uint256 totalAmountToBorrow,
         uint256 assetBalance,
@@ -396,13 +368,11 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
     }
 
-    /**
-     * @notice Reduces leverage down to a target borrowed amount
-     * @param _targetAmountBorrowed Target amount to maintain borrowed
-     * @param _deposits Current deposits in lending platform
-     * @param _borrows Current borrows from lending platform
-     * @dev Executes deleveraging in iterations up to maxIterations
-     */
+    /// @notice Reduces leverage down to a target borrowed amount
+    /// @param _targetAmountBorrowed Target amount to maintain borrowed
+    /// @param _deposits Current deposits in lending platform
+    /// @param _borrows Current borrows from lending platform
+    /// @dev Executes deleveraging in iterations up to maxIterations
     function _leverDownTo(
         uint256 _targetAmountBorrowed,
         uint256 _deposits,
@@ -455,13 +425,11 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
     }
 
-    /**
-     * @notice Withdraws excess collateral above target ratio
-     * @param collatRatio Target collateral ratio to maintain
-     * @param deposits Current deposits in lending platform
-     * @param borrows Current borrows from lending platform
-     * @return amount Amount of collateral withdrawn
-     */
+    /// @notice Withdraws excess collateral above target ratio
+    /// @param collatRatio Target collateral ratio to maintain
+    /// @param deposits Current deposits in lending platform
+    /// @param borrows Current borrows from lending platform
+    /// @return amount Amount of collateral withdrawn
     function _withdrawExcessCollateral(
         uint256 collatRatio,
         uint256 deposits,
@@ -474,10 +442,8 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
     }
 
-    /**
-     * @notice Gets the current balance of asset token held by this contract
-     * @return Current balance of asset token
-     */
+    /// @notice Gets the current balance of asset token held by this contract
+    /// @return Current balance of asset token
     function balanceOfAsset() internal view returns (uint256) {
         return ERC20(asset).balanceOf(address(this));
     }
@@ -492,13 +458,11 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         returns (uint256 ltv, uint256 liquidationThreshold)
     {}
 
-    /**
-     * @notice Returns the estimated deposits and borrows from the lending platform
-     * @return deposits Estimated amount of asset tokens deposited
-     * @return borrows Estimated amount of asset tokens borrowed
-     * @dev Must be implemented by the specific lending platform integration
-     *      Should use view functions to estimate position without state changes
-     */
+    /// @notice Returns the estimated deposits and borrows from the lending platform
+    /// @return deposits Estimated amount of asset tokens deposited
+    /// @return borrows Estimated amount of asset tokens borrowed
+    /// @dev Must be implemented by the specific lending platform integration
+    ///      Should use view functions to estimate position without state changes
     function estimatedPosition()
         public
         view
@@ -506,41 +470,33 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         returns (uint256 deposits, uint256 borrows)
     {}
 
-    /**
-     * @notice Returns the current deposits and borrows from the lending platform
-     * @return deposits Current amount of asset tokens deposited
-     * @return borrows Current amount of asset tokens borrowed
-     * @dev Must be implemented by the specific lending platform integration
-     *      May perform state changes to sync and get accurate position
-     */
+    /// @notice Returns the current deposits and borrows from the lending platform
+    /// @return deposits Current amount of asset tokens deposited
+    /// @return borrows Current amount of asset tokens borrowed
+    /// @dev Must be implemented by the specific lending platform integration
+    ///      May perform state changes to sync and get accurate position
     function livePosition()
         public
         virtual
         returns (uint256 deposits, uint256 borrows)
     {}
 
-    /**
-     * @notice Gets the estimated LTV ratio based on current position
-     * @return _estimatedLTV Current estimated LTV ratio
-     */
+    /// @notice Gets the estimated LTV ratio based on current position
+    /// @return _estimatedLTV Current estimated LTV ratio
     function estimatedLTV() public view returns (uint256 _estimatedLTV) {
         (uint256 deposits, uint256 borrows) = estimatedPosition();
         _estimatedLTV = getLTV(deposits, borrows);
     }
 
-    /**
-     * @notice Gets the current live LTV ratio by syncing position
-     * @return _liveLTV Current live LTV ratio
-     */
+    /// @notice Gets the current live LTV ratio by syncing position
+    /// @return _liveLTV Current live LTV ratio
     function liveLTV() public returns (uint256 _liveLTV) {
         (uint256 deposits, uint256 borrows) = livePosition();
         _liveLTV = getLTV(deposits, borrows);
     }
 
-    /**
-     * @notice Estimates the total assets managed by this strategy
-     * @return _totalAssets Total value of assets in strategy
-     */
+    /// @notice Estimates the total assets managed by this strategy
+    /// @return _totalAssets Total value of assets in strategy
     function estimatedTotalAssets() public view returns (uint256 _totalAssets) {
         _totalAssets += balanceOfAsset();
         (uint256 deposits, uint256 borrows) = estimatedPosition();
@@ -548,12 +504,10 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         _totalAssets += (estimatedRewardsInAsset() * 9000) / 10000;
     }
 
-    /**
-     * @notice Estimates the value of unclaimed rewards in terms of asset tokens
-     * @return _rewardsInWant Estimated value of unclaimed rewards in asset tokens
-     * @dev Must be implemented by the specific lending platform integration
-     *      Should account for all types of rewards and their current market prices
-     */
+    /// @notice Estimates the value of unclaimed rewards in terms of asset tokens
+    /// @return _rewardsInWant Estimated value of unclaimed rewards in asset tokens
+    /// @dev Must be implemented by the specific lending platform integration
+    ///      Should account for all types of rewards and their current market prices
     function estimatedRewardsInAsset()
         public
         view
@@ -563,12 +517,10 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
 
     // Section: LTV Math
 
-    /**
-     * @notice Calculates the Loan-to-Value ratio
-     * @param deposits Amount of deposits
-     * @param borrows Amount of borrows
-     * @return Current LTV ratio in COLLATERAL_RATIO_PRECISION
-     */
+    /// @notice Calculates the Loan-to-Value ratio
+    /// @param deposits Amount of deposits
+    /// @param borrows Amount of borrows
+    /// @return Current LTV ratio in COLLATERAL_RATIO_PRECISION
     function getLTV(
         uint256 deposits,
         uint256 borrows
@@ -579,12 +531,10 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         return (borrows * COLLATERAL_RATIO_PRECISION) / deposits;
     }
 
-    /**
-     * @notice Calculates how much can be borrowed given a deposit amount and collateral ratio
-     * @param deposit Amount of deposits
-     * @param collatRatio Target collateral ratio
-     * @return Maximum amount that can be borrowed
-     */
+    /// @notice Calculates how much can be borrowed given a deposit amount and collateral ratio
+    /// @param deposit Amount of deposits
+    /// @param collatRatio Target collateral ratio
+    /// @return Maximum amount that can be borrowed
     function getBorrowFromDeposit(
         uint256 deposit,
         uint256 collatRatio
@@ -593,12 +543,10 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         return (deposit * collatRatio) / COLLATERAL_RATIO_PRECISION;
     }
 
-    /**
-     * @notice Calculates required deposit amount for a given borrow amount and collateral ratio
-     * @param borrow Amount borrowed
-     * @param collatRatio Target collateral ratio
-     * @return Required deposit amount
-     */
+    /// @notice Calculates required deposit amount for a given borrow amount and collateral ratio
+    /// @param borrow Amount borrowed
+    /// @param collatRatio Target collateral ratio
+    /// @return Required deposit amount
     function getDepositFromBorrow(
         uint256 borrow,
         uint256 collatRatio
@@ -607,12 +555,10 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         return (borrow * COLLATERAL_RATIO_PRECISION) / collatRatio;
     }
 
-    /**
-     * @notice Calculates optimal borrow amount given supply and target collateral ratio
-     * @param supply Total supply amount
-     * @param collatRatio Target collateral ratio
-     * @return Optimal borrow amount
-     */
+    /// @notice Calculates optimal borrow amount given supply and target collateral ratio
+    /// @param supply Total supply amount
+    /// @param collatRatio Target collateral ratio
+    /// @return Optimal borrow amount
     function getBorrowFromSupply(
         uint256 supply,
         uint256 collatRatio
