@@ -122,6 +122,9 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         return POOL.repay(address(asset), _amount, 2, address(this));
     }
 
+    /// @notice Repays debt using aTokens directly
+    /// @param _amount The amount of debt to repay using aTokens
+    /// @return The actual amount repaid
     function _repayWithATokens(uint256 _amount) internal returns (uint256) {
         if (_amount == 0) return 0;
         return POOL.repayWithATokens(address(asset), _amount, 2);
