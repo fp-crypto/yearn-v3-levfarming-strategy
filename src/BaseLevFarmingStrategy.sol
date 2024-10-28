@@ -260,6 +260,34 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         if (_borrows == 0) _withdraw(Math.min(_deposits, _amount));
     }
 
+    /// @notice Emergency function to manually deleverage a position
+    /// @param amount The amount of asset tokens to deleverage
+    /// @dev Can only be called by emergency authorized addresses
+    ///      Will withdraw and repay the specified amount
+    function manualDeleverage(uint256 amount) external onlyEmergencyAuthorized {
+        _withdraw(amount);
+        _repay(amount);
+    }
+
+    /// @notice Emergency function to manually withdraw asset tokens from the lending platform
+    /// @param amount The amount of asset tokens to withdraw
+    /// @dev Can only be called by emergency authorized addresses
+    ///      Used when normal deleverage process is not functioning
+    function manualReleaseWant(
+        uint256 amount
+    ) external onlyEmergencyAuthorized {
+        _withdraw(amount);
+    }
+
+    /// @notice Emergency function to manually claim and sell reward tokens
+    /// @dev Can only be called by emergency authorized addresses
+    ///      Used when automated reward handling is not functioning
+    ///      Will claim available rewards and attempt to sell them for asset tokens
+    function manualClaimAndSellRewards() external onlyEmergencyAuthorized {
+        _claimRewards();
+        _sellRewards();
+    }
+
     /// @notice Deposits asset tokens into the lending platform
     /// @param _amount Amount of asset tokens to deposit
     /// @dev Must be implemented by the specific lending platform integration

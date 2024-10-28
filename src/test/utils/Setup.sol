@@ -48,7 +48,7 @@ contract Setup is ExtendedTest, IEvents {
 
     uint256 public profitMaxUnlockTime = 1 hours;
 
-    uint256 public constant REPORTING_PERIOD = 7 days;
+    uint256 public constant REPORTING_PERIOD = 1 days;
 
     function setUp() public virtual {
         _setTokenAddrs();
@@ -219,8 +219,8 @@ contract Setup is ExtendedTest, IEvents {
         (uint256 _deposits, uint256 _borrows) = strategy.livePosition();
         console.log("\n");
         console.log("==== Strategy Info ====");
-        console.log("Debt: %e", _deposits);
-        console.log("Collateral: %e", _borrows);
+        console.log("Deposits: %e", _deposits);
+        console.log("Borrows: %e", _borrows);
         console.log(
             "LTV (actual/target): %e/%e",
             strategy.liveLTV(),

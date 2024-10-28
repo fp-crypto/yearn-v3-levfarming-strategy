@@ -23,11 +23,11 @@ interface IStrategyInterface is IBaseHealthCheck {
     function estimatedPosition()
         external
         view
-        returns (uint256 deposits, uint256 borrows);
+        returns (uint256 _deposits, uint256 _borrows);
 
     function livePosition()
         external
-        returns (uint256 deposits, uint256 borrows);
+        returns (uint256 _deposits, uint256 _borrows);
 
     function estimatedLTV() external view returns (uint256 _estimatedLTV);
 
@@ -53,4 +53,10 @@ interface IStrategyInterface is IBaseHealthCheck {
     function setMinAsset(uint96 _minAsset) external;
 
     function setMinRewardSell(uint96 _minRewardSell) external;
+
+    function manualDeleverage(uint256 _amount) external;
+
+    function manualReleaseWant(uint256 _amount) external;
+
+    function manualClaimAndSellRewards() external;
 }
