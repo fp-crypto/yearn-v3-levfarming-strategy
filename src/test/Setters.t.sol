@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import "forge-std/console.sol";
 import {Setup, ERC20} from "./utils/Setup.sol";
 
-contract OperationTest is Setup {
+contract SettersTest is Setup {
     function setUp() public virtual override {
         super.setUp();
     }
