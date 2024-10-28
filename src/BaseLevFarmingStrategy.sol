@@ -128,9 +128,10 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
 
         // check current LTV
         uint256 _liveLTV = liveLTV();
+        uint256 _targetLTV = uint256(targetLTV);
 
         // we should lever up
-        if (targetLTV > _liveLTV && targetLTV - _liveLTV > minAdjustRatio) {
+        if (_targetLTV > _liveLTV && _targetLTV - _liveLTV > minAdjustRatio) {
             _leverMax();
         }
     }

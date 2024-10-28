@@ -71,6 +71,47 @@ contract TendTriggerTest is Setup {
         (trigger, ) = strategy.tendTrigger();
         assertFalse(trigger);
 
+        uint64 _targetLtv = strategy.targetLTV();
+        vm.startPrank(management);
+        strategy.setLTVs(_targetLtv / 2, strategy.maxBorrowLTV(), strategy.maxLTV());
+        vm.stopPrank();
+
+        (trigger, ) = strategy.tendTrigger();
+        assertTrue(trigger);
+
+        vm.prank(keeper);
+        strategy.tend();
+        checkLTV(false);
+        logStrategyInfo();
+
+        vm.startPrank(management);
+        strategy.setLTVs(_targetLtv, strategy.maxBorrowLTV(), strategy.maxLTV());
+        vm.stopPrank();
+
+        (trigger, ) = strategy.tendTrigger();
+        assertTrue(trigger);
+
+        vm.prank(management);
+        strategy.shutdownStrategy();
+
+        (trigger, ) = strategy.tendTrigger();
+        assertFalse(trigger);
+
+        vm.startPrank(management);
+        strategy.setLTVs(0, strategy.maxBorrowLTV(), strategy.maxLTV());
+        vm.stopPrank();
+
+        (trigger, ) = strategy.tendTrigger();
+        assertTrue(trigger);
+
+        vm.prank(keeper);
+        strategy.tend();
+        checkLTV(false);
+        logStrategyInfo();
+
+        (trigger, ) = strategy.tendTrigger();
+        assertFalse(trigger);
+
         // Unlock Profits
         skip(strategy.profitMaxUnlockTime());
         vm.prank(user);

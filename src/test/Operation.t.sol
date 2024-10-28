@@ -327,4 +327,121 @@ contract OperationTest is Setup {
         checkStrategyTotals(strategy, _amount, _amount, 0);
         assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, 1, "!eta");
     }
+
+    /// @notice Test basic deposit and withdrawal flow
+    /// @param _amount The amount to deposit
+    /// @param _noFlashloans Whether to disable flashloans
+    function test_opsLtvZero(uint256 _amount, bool _noFlashloans) public {
+        _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
+
+        if (_noFlashloans) {
+            vm.prank(management);
+            strategy.setFlashloanEnabled(false);
+        }
+
+        vm.startPrank(management);
+        strategy.setLTVs(0, strategy.maxBorrowLTV(), strategy.maxLTV());
+        vm.stopPrank();
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        assertApproxEq(
+            strategy.estimatedTotalAssets(),
+            _amount,
+            strategy.minAsset(),
+            "!eta"
+        );
+        checkStrategyTotals(strategy, _amount, _amount, 0);
+        checkLTV(true);
+        logStrategyInfo();
+
+        skip(1 days);
+
+        logStrategyInfo();
+        checkLTV(true);
+
+        logStrategyInfo();
+
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+
+        // Expect to get same amount out
+        assertGt(asset.balanceOf(user), 0, "!final balance");
+        assertGe(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
+            "!final balance"
+        );
+
+        logStrategyInfo();
+    }
+
+    /// @notice Test basic deposit and withdrawal flow
+    /// @param _amount The amount to deposit
+    /// @param _noFlashloans Whether to disable flashloans
+    function test_opsLtvRaised(
+        uint256 _amount,
+        bool _noFlashloans,
+        uint256 _part
+    ) public {
+        _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
+        _part = bound(_part, 2, 10);
+
+        if (_noFlashloans) {
+            vm.prank(management);
+            strategy.setFlashloanEnabled(false);
+        }
+
+        vm.startPrank(management);
+        strategy.setLTVs(0.05e18, strategy.maxBorrowLTV(), strategy.maxLTV());
+        vm.stopPrank();
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        assertApproxEq(
+            strategy.estimatedTotalAssets(),
+            _amount,
+            strategy.minAsset(),
+            "!eta"
+        );
+        checkStrategyTotals(strategy, _amount, _amount, 0);
+        checkLTV(true);
+        logStrategyInfo();
+
+        skip(1 days);
+
+        logStrategyInfo();
+        checkLTV(true);
+
+        vm.startPrank(management);
+        strategy.setLTVs(0.25e18, strategy.maxBorrowLTV(), strategy.maxLTV());
+        vm.stopPrank();
+
+        logStrategyInfo();
+
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // Withdraw all funds
+        vm.startPrank(user);
+        strategy.redeem(_amount / _part, user, user);
+        logStrategyInfo();
+        strategy.redeem(strategy.balanceOf(user), user, user);
+        vm.stopPrank();
+
+        // Expect to get same amount out
+        assertGt(asset.balanceOf(user), 0, "!final balance");
+        assertRelApproxEq(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
+            1,
+            "!final balance"
+        );
+
+        logStrategyInfo();
+    }
 }

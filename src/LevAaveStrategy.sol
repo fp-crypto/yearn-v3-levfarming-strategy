@@ -56,12 +56,11 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         // Set lending+borrowing tokens
         (address _aToken, , address _debtToken) = PROTOCOL_DATA_PROVIDER
             .getReserveTokensAddresses(address(asset));
-
         A_TOKEN = IAToken(_aToken);
         DEBT_TOKEN = IVariableDebtToken(_debtToken);
 
         //_setEMode(true); // use emode if it's available
-        // Set collateral targets
+        // Set ltv targets
         _autoConfigureLTVs();
 
         // approve spend protocol spend
@@ -283,23 +282,23 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         borrows = ERC20(address(DEBT_TOKEN)).balanceOf(address(this));
     }
 
-    /// @inheritdoc BaseLevFarmingStrategy
-    function _estimateTokenToAsset(
-        address _from,
-        uint256 _amount
-    ) internal view override returns (uint256) {
-        // TODO: Implement
-    }
+    // /// @inheritdoc BaseLevFarmingStrategy
+    // function _estimateTokenToAsset(
+    //     address _from,
+    //     uint256 _amount
+    // ) internal view override returns (uint256) {
+    //     // TODO: Implement
+    // }
 
-    /// @inheritdoc BaseLevFarmingStrategy
-    function estimatedRewardsInAsset()
-        public
-        view
-        override
-        returns (uint256 _rewardsInAsset)
-    {
-        // TODO: Implement
-    }
+    // /// @inheritdoc BaseLevFarmingStrategy
+    // function estimatedRewardsInAsset()
+    //     public
+    //     view
+    //     override
+    //     returns (uint256 _rewardsInAsset)
+    // {
+    //     // TODO: Implement
+    // }
 
     /// @inheritdoc BaseLevFarmingStrategy
     /// @dev Takes into account E-Mode if enabled
@@ -309,20 +308,24 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         override
         returns (uint256 ltv, uint256 liquidationThreshold)
     {
-        uint8 _emodeCategory = uint8(POOL.getUserEMode(address(this)));
+        // uint8 _emodeCategory = uint8(POOL.getUserEMode(address(this)));
 
-        if (_emodeCategory == 0) {
-            // emode disabled
-            (, ltv, liquidationThreshold, , , , , , , ) = PROTOCOL_DATA_PROVIDER
-                .getReserveConfigurationData(address(asset));
-        } else {
-            DataTypes.EModeCategory memory _eModeCategoryData = POOL
-                .getEModeCategoryData(_emodeCategory);
-            ltv = uint256(_eModeCategoryData.ltv);
-            liquidationThreshold = uint256(
-                _eModeCategoryData.liquidationThreshold
-            );
-        }
+        // if (_emodeCategory == 0) {
+        //     // emode disabled
+        //     (, ltv, liquidationThreshold, , , , , , , ) = PROTOCOL_DATA_PROVIDER
+        //         .getReserveConfigurationData(address(asset));
+        // } else {
+        //     DataTypes.EModeCategory memory _eModeCategoryData = POOL
+        //         .getEModeCategoryData(_emodeCategory);
+        //     ltv = uint256(_eModeCategoryData.ltv);
+        //     liquidationThreshold = uint256(
+        //         _eModeCategoryData.liquidationThreshold
+        //     );
+        // }
+
+        (, ltv, liquidationThreshold, , , , , , , ) = PROTOCOL_DATA_PROVIDER
+            .getReserveConfigurationData(address(asset));
+
         // convert bps to wad
         ltv = ltv * WAD_BPS_RATIO;
         liquidationThreshold = liquidationThreshold * WAD_BPS_RATIO;
