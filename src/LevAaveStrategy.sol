@@ -68,26 +68,7 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         ERC20(address(_aToken)).safeApprove(address(POOL), type(uint256).max);
     }
 
-    /// @notice Sets the Loan-to-Value ratios for the strategy
-    /// @dev All values should be in WAD (1e18) format
-    /// @param _targetLTV The target LTV ratio to maintain
-    /// @param _maxBorrowLTV The maximum LTV ratio for borrowing
-    /// @param _maxLTV The maximum allowed LTV ratio
-    function setLTVs(
-        uint64 _targetLTV,
-        uint64 _maxBorrowLTV,
-        uint64 _maxLTV
-    ) external override onlyManagement {
-        (uint256 ltv, uint256 liquidationThreshold) = getProtocolLTVs();
-        require(_targetLTV < liquidationThreshold);
-        require(_maxLTV < liquidationThreshold);
-        require(_targetLTV < _maxLTV);
-        require(_maxBorrowLTV < ltv);
 
-        targetLTV = _targetLTV;
-        maxBorrowLTV = _maxBorrowLTV;
-        maxLTV = _maxLTV;
-    }
 
     /// @notice Enables or disables flash loan functionality
     /// @param _flashloanEnabled True to enable flash loans, false to disable
@@ -95,6 +76,21 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         bool _flashloanEnabled
     ) external onlyManagement {
         flashloanEnabled = _flashloanEnabled;
+    }
+
+    /// @inheritdoc BaseLevFarmingStrategy
+    function _setLTVs(
+        uint64 _targetLTV,
+        uint64 _maxBorrowLTV,
+        uint64 _maxLTV
+    ) internal override {
+        (uint256 ltv, uint256 liquidationThreshold) = getProtocolLTVs();
+        require(_targetLTV < liquidationThreshold);
+        require(_maxLTV < liquidationThreshold);
+        require(_targetLTV < _maxLTV);
+        require(_maxBorrowLTV < ltv);
+
+        super._setLTVs(_targetLTV, _maxBorrowLTV, _maxLTV);
     }
 
     /// @inheritdoc BaseLevFarmingStrategy
@@ -246,10 +242,10 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         _rewardsController.claimAllRewards(assets, address(this));
     }
 
-    /// @inheritdoc BaseLevFarmingStrategy
-    function _sellRewards() internal override {
-        // TODO: implement
-    }
+    // /// @inheritdoc BaseLevFarmingStrategy
+    // function _sellRewards() internal override {
+    //     // TODO: implement
+    // }
 
     /// @inheritdoc BaseLevFarmingStrategy
     function estimatedPosition()

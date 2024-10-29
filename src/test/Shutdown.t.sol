@@ -10,7 +10,7 @@ contract ShutdownTest is Setup {
         setFees(0, 0); // set fees to 0 to make life easy
     }
 
-    function test_shutdownCanWithdraw(uint256 _amount, bool profit) public {
+    function test_shutdownCanWithdraw(uint256 _amount, bool _profit) public {
         _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
 
         // Deposit into strategy
@@ -21,7 +21,7 @@ contract ShutdownTest is Setup {
         vm.prank(keeper);
         strategy.tend();
 
-        if (profit) {
+        if (_profit) {
             // Make money
             skip(REPORTING_PERIOD);
             vm.prank(keeper);

@@ -76,9 +76,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         uint64 _maxBorrowLTV,
         uint64 _maxLTV
     ) external virtual onlyManagement {
-        targetLTV = _targetLTV;
-        maxBorrowLTV = _maxBorrowLTV;
-        maxLTV = _maxLTV;
+        _setLTVs(_targetLTV, _maxBorrowLTV, _maxLTV);
     }
 
     /// @notice Sets maximum base fee in gwei for tend operations
@@ -287,6 +285,22 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     function manualClaimAndSellRewards() external onlyEmergencyAuthorized {
         _claimRewards();
         _sellRewards();
+    }
+
+    /**
+     * @notice Sets the LTV ratios for the strategy
+     * @param _targetLTV Target Loan-to-Value ratio to maintain
+     * @param _maxBorrowLTV Maximum borrowing LTV allowed by the protocol
+     * @param _maxLTV Maximum LTV before liquidation risk
+     */
+    function _setLTVs(
+        uint64 _targetLTV,
+        uint64 _maxBorrowLTV,
+        uint64 _maxLTV
+    ) internal virtual {
+        targetLTV = _targetLTV;
+        maxBorrowLTV = _maxBorrowLTV;
+        maxLTV = _maxLTV;
     }
 
     /// @notice Deposits asset tokens into the lending platform

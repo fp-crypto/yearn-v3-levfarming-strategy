@@ -11,7 +11,7 @@ contract ManualFunctionsTest is Setup {
         super.setUp();
     }
 
-    function test_manualGuards(uint256 _amount) public {
+    function test_manualGuards() public {
         vm.expectRevert("!emergency authorized");
         strategy.manualDeleverage(0);
 
