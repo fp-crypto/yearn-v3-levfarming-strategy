@@ -4,12 +4,12 @@ pragma solidity ^0.8.18;
 import "forge-std/console.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
-import {LevAaveStrategy as Strategy, ERC20} from "../../LevAaveStrategy.sol";
-import {LevAaveStrategyFactory as StrategyFactory} from "../../LevAaveStrategyFactory.sol";
-import {ILevAaveStrategyInterface} from "../../interfaces/ILevAaveStrategyInterface.sol";
+import {LevAaveStrategy as Strategy, ERC20} from "../../../LevAaveStrategy.sol";
+import {LevAaveStrategyFactory as StrategyFactory} from "../../../factory/LevAaveStrategyFactory.sol";
+import {ILevAaveStrategyInterface} from "../../../interfaces/ILevAaveStrategyInterface.sol";
 
-import {IACLManager} from "../../interfaces/aave/v3/core/IACLManager.sol";
-import {IPoolConfigurator} from "../../interfaces/aave/v3/core/IPoolConfigurator.sol";
+import {IACLManager} from "../../../interfaces/aave/v3/core/IACLManager.sol";
+import {IPoolConfigurator} from "../../../interfaces/aave/v3/core/IPoolConfigurator.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";

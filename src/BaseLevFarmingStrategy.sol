@@ -333,16 +333,6 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @dev Must be implemented by the specific lending platform integration
     function _sellRewards() internal virtual {}
 
-    /// @notice Estimates the value of reward tokens in terms of asset tokens
-    /// @param _token Address of the reward token
-    /// @param _amount Amount of reward tokens
-    /// @return Estimated value in asset tokens
-    /// @dev Must be implemented by the specific lending platform integration
-    function _estimateTokenToAsset(
-        address _token,
-        uint256 _amount
-    ) internal view virtual returns (uint256) {}
-
     /// @notice Leverages the position up to the target LTV ratio
     /// @dev Calculates required borrowing and executes leveraging in iterations
     function _leverMax() internal {
