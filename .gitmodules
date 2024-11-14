@@ -14,6 +14,6 @@
 	path = lib/tokenized-strategy-periphery
 	url = https://github.com/yearn/tokenized-strategy-periphery
 	branch = master
-[submodule "lib/uniswap"]
-	path = lib/uniswap
-	url = https://github.com/uniswap/v3-core
+[submodule "lib/slipstream"]
+	path = lib/slipstream
+	url = https://github.com/fp-crypto/slipstream

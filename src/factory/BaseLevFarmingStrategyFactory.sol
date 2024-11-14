@@ -30,15 +30,6 @@ contract BaseLevFarmingStrategyFactory {
         keeper = _keeper;
     }
 
-    /// @notice Deploy a new strategy
-    /// @param _asset The underlying asset address for the strategy
-    /// @param _name The name for the strategy
-    /// @return Address of the newly deployed strategy
-    function newStrategy(
-        address _asset,
-        string memory _name
-    ) external virtual returns (address) {}
-
     /// @notice Update the keeper address
     /// @dev Only callable by the SMS
     /// @param _keeper The new keeper address

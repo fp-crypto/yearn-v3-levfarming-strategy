@@ -67,11 +67,13 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
 
     /// @inheritdoc BaseLevFarmingStrategy
     function _borrow(uint256 _amount) internal override {
+        if (_amount == 0) return;
         require(C_TOKEN.borrow(_amount) == 0);
     }
 
     /// @inheritdoc BaseLevFarmingStrategy
     function _repay(uint256 _amount) internal override returns (uint256) {
+        if (_amount == 0) return 0;
         require(C_TOKEN.repayBorrow(_amount) == 0);
         return _amount;
     }
@@ -106,12 +108,12 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
     {
         (
             ,
-            uint256 C_TOKENBalance,
+            uint256 cTokenBalance,
             uint256 borrowBalance,
             uint256 exchangeRate
         ) = C_TOKEN.getAccountSnapshot(address(this));
         borrows = borrowBalance;
-        deposits = (C_TOKENBalance * exchangeRate) / 1e18;
+        deposits = (cTokenBalance * exchangeRate) / 1e18;
     }
 
     /// @inheritdoc BaseLevFarmingStrategy
@@ -129,6 +131,7 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
     function getProtocolLTVs()
         internal
         view
+        virtual
         override
         returns (uint256 ltv, uint256 liquidationThreshold)
     {

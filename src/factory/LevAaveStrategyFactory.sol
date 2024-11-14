@@ -29,7 +29,7 @@ contract LevAaveStrategyFactory is BaseLevFarmingStrategyFactory {
     function newStrategy(
         address _asset,
         string memory _name
-    ) external override returns (address) {
+    ) external returns (address) {
         return newStrategy(_asset, _name, AAVE_ADDRESSES_PROVDIER);
     }
 

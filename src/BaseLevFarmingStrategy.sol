@@ -59,6 +59,9 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @notice Minimum amount of rewards to sell
     uint96 public minRewardSell = 1e15;
 
+    /// @notice Factor to discount estimated rewards value (1000 = 10%)
+    uint16 public rewardPessimismFactor = 1000;
+
     constructor(
         address _asset,
         string memory _name
@@ -116,12 +119,20 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         minRewardSell = _minRewardSell;
     }
 
+    /// @dev Only callable by management
+    /// @notice Sets the pessimism factor for reward value estimation
+    /// @param _rewardPessimismFactor New pessimism factor (1000 = 10%)
+    /// @dev Only callable by management
+    function setRewardPessimismFactor(uint16 _rewardPessimismFactor) external onlyManagement {
+        rewardPessimismFactor = _rewardPessimismFactor;
+    }
+
     /// @inheritdoc BaseStrategy
     function _deployFunds(uint256 /*_amount*/) internal override {
         uint256 assetBalance = balanceOfAsset();
         // deposit available asset as collateral
         if (assetBalance > minAsset) {
-            _deposit(assetBalance);
+            _deposit(Math.min(assetBalance, _maxSupply()));
         }
 
         // check current LTV
@@ -180,7 +191,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     function _tend(uint256 _totalIdle) internal override {
         // deposit available asset as collateral
         if (_totalIdle > minAsset) {
-            _deposit(_totalIdle);
+            _deposit(Math.min(_totalIdle, _maxSupply()));
         }
 
         (uint256 _deposits, uint256 _borrows) = livePosition();
@@ -306,24 +317,24 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @notice Deposits asset tokens into the lending platform
     /// @param _amount Amount of asset tokens to deposit
     /// @dev Must be implemented by the specific lending platform integration
-    function _deposit(uint256 _amount) internal virtual {}
+    function _deposit(uint256 _amount) internal virtual;
 
     /// @notice Withdraws asset tokens from the lending platform
     /// @param _amount Amount of asset tokens to withdraw
     /// @return Amount of asset tokens actually withdrawn
     /// @dev Must be implemented by the specific lending platform integration
-    function _withdraw(uint256 _amount) internal virtual returns (uint256) {}
+    function _withdraw(uint256 _amount) internal virtual returns (uint256);
 
     /// @notice Borrows asset tokens from the lending platform
     /// @param _amount Amount of asset tokens to borrow
     /// @dev Must be implemented by the specific lending platform integration
-    function _borrow(uint256 _amount) internal virtual {}
+    function _borrow(uint256 _amount) internal virtual;
 
     /// @notice Repays borrowed asset tokens to the lending platform
     /// @param _amount Amount of asset tokens to repay
     /// @return Amount of asset tokens actually repaid
     /// @dev Must be implemented by the specific lending platform integration
-    function _repay(uint256 _amount) internal virtual returns (uint256) {}
+    function _repay(uint256 _amount) internal virtual returns (uint256);
 
     /// @notice Claims any available rewards from the lending platform
     /// @dev Must be implemented by the specific lending platform integration
@@ -333,6 +344,20 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @dev Must be implemented by the specific lending platform integration
     function _sellRewards() internal virtual {}
 
+    /// @notice Returns maximum amount that can be borrowed from the lending platform
+    /// @return Maximum borrowable amount
+    /// @dev Must be implemented by specific lending platform integration
+    function _maxBorrow() internal view virtual returns (uint256) {
+        return type(uint256).max;
+    }
+
+    /// @notice Returns maximum amount that can be supplied to the lending platform
+    /// @return Maximum supply amount
+    /// @dev Must be implemented by specific lending platform integration
+    function _maxSupply() internal view virtual returns (uint256) {
+        return type(uint256).max;
+    }
+
     /// @notice Leverages the position up to the target LTV ratio
     /// @dev Calculates required borrowing and executes leveraging in iterations
     function _leverMax() internal {
@@ -341,9 +366,20 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
 
         uint256 realSupply = deposits - borrows + assetBalance;
         uint256 newBorrow = getBorrowFromSupply(realSupply, targetLTV);
+        uint256 newDeposit = getDepositFromBorrow(newBorrow, targetLTV);
+        uint256 maxSupply = _maxSupply();
+        if (newDeposit - deposits >= maxSupply) {
+            newDeposit = maxSupply + deposits; //TODO: fix me
+            newBorrow = getBorrowFromDeposit(maxSupply, targetLTV);
+        }
         uint256 totalAmountToBorrow = newBorrow - borrows;
 
-        _leverUpTo(totalAmountToBorrow, assetBalance, deposits, borrows);
+        _leverUpTo(
+            Math.min(totalAmountToBorrow, _maxBorrow()),
+            assetBalance,
+            deposits,
+            borrows
+        );
     }
 
     /// @notice Executes leveraging up to a target borrowed amount
@@ -527,24 +563,28 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         _liveLTV = getLTV(deposits, borrows);
     }
 
-    /// @notice Estimates the total assets managed by this strategy
-    /// @return _totalAssets Total value of assets in strategy
+    /// @notice Estimates total value of all assets managed by this strategy
+    /// @return _totalAssets Sum of idle assets, net lending position, and discounted reward value
+    /// @dev Applies rewardPessimismFactor to discount estimated reward value
     function estimatedTotalAssets() public view returns (uint256 _totalAssets) {
         _totalAssets += balanceOfAsset();
         (uint256 deposits, uint256 borrows) = estimatedPosition();
         _totalAssets += deposits - borrows;
-        _totalAssets += (estimatedRewardsInAsset() * 9000) / 10000;
+        _totalAssets +=
+            (estimatedRewardsInAsset() *
+                (MAX_BPS - uint256(rewardPessimismFactor))) /
+            10000;
     }
 
-    /// @notice Estimates the value of unclaimed rewards in terms of asset tokens
-    /// @return _rewardsInWant Estimated value of unclaimed rewards in asset tokens
+    /// @notice Estimates the value of both claimed and unclaimed rewards in terms of asset tokens
+    /// @return _rewardsInAsset Estimated value of unclaimed rewards in asset tokens
     /// @dev Must be implemented by the specific lending platform integration
     ///      Should account for all types of rewards and their current market prices
     function estimatedRewardsInAsset()
         public
         view
         virtual
-        returns (uint256 _rewardsInWant)
+        returns (uint256 _rewardsInAsset)
     {}
 
     // Section: LTV Math

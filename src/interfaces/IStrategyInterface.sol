@@ -38,6 +38,11 @@ interface IStrategyInterface is IBaseHealthCheck {
         view
         returns (uint256 _totalAssets);
 
+    function estimatedRewardsInAsset()
+        external
+        view
+        returns (uint256 _rewardsInAsset);
+
     function setLTVs(
         uint64 _targetLTV,
         uint64 _maxBorrowLTV,
@@ -53,6 +58,8 @@ interface IStrategyInterface is IBaseHealthCheck {
     function setMinAsset(uint96 _minAsset) external;
 
     function setMinRewardSell(uint96 _minRewardSell) external;
+
+    function setRewardPessimismFactor(uint64 _rewardPessimismFactory) external;
 
     function manualDeleverage(uint256 _amount) external;
 
