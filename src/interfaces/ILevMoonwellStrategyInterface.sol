@@ -2,9 +2,9 @@
 pragma solidity ^0.8.18;
 
 import {ILevCompStrategyInterface} from "./ILevCompStrategyInterface.sol";
-import {IUniswapV3Swapper} from "@periphery/swappers/interfaces/IUniswapV3Swapper.sol";
 
-interface ILevMoonwellStrategyInterface is
-    ILevCompStrategyInterface,
-    IUniswapV3Swapper
-{}
+interface ILevMoonwellStrategyInterface is ILevCompStrategyInterface {
+    function wethToAssetSwapTickSpacing() external view returns (int24);
+
+    function setWethToAssetSwapTickSpacing(int24) external;
+}

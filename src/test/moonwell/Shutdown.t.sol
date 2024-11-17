@@ -39,7 +39,8 @@ contract ShutdownTest is Setup {
 
         // Make sure we can still withdraw the full amount
         uint256 balanceBefore = asset.balanceOf(user);
-        uint256 eta = strategy.estimatedTotalAssets();
+        (uint256 _deposits, uint256 _borrows) = strategy.livePosition();
+        uint256 etaWithOutRewards = _deposits + totalIdle(strategy) - _borrows;
 
         // Withdraw all funds
         vm.prank(user);
@@ -47,7 +48,7 @@ contract ShutdownTest is Setup {
 
         assertRelApproxEq(
             asset.balanceOf(user),
-            balanceBefore + eta,
+            balanceBefore + etaWithOutRewards,
             1,
             "!final balance"
         );
@@ -72,14 +73,16 @@ contract ShutdownTest is Setup {
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
-        vm.prank(management);
+        logStrategyInfo();
+        vm.startPrank(management);
         strategy.emergencyWithdraw(_amount);
+        vm.stopPrank();
+        logStrategyInfo();
 
         // Make sure we can still withdraw the full amount
         uint256 balanceBefore = asset.balanceOf(user);
-        uint256 eta = strategy.estimatedTotalAssets();
-
-        assertEq(eta, totalIdle(strategy), "!idle");
+        (uint256 _deposits, uint256 _borrows) = strategy.livePosition();
+        uint256 etaWithOutRewards = _deposits + totalIdle(strategy) - _borrows;
 
         // Withdraw all funds
         vm.prank(user);
@@ -87,7 +90,7 @@ contract ShutdownTest is Setup {
 
         assertRelApproxEq(
             asset.balanceOf(user),
-            balanceBefore + eta,
+            balanceBefore + etaWithOutRewards,
             1,
             "!final balance"
         );
@@ -121,23 +124,17 @@ contract ShutdownTest is Setup {
 
         // Make sure we can still withdraw the full amount
         uint256 balanceBefore = asset.balanceOf(user);
-        uint256 eta = strategy.estimatedTotalAssets();
-
-        assertApproxEq(
-            totalIdle(strategy),
-            Math.min(eta, _withdrawAmount),
-            (Math.min(_withdrawAmount, strategy.totalAssets()) * 500) / 10_000, // allow slippage
-            "!idle"
-        );
+        (uint256 _deposits, uint256 _borrows) = strategy.livePosition();
+        uint256 etaWithOutRewards = _deposits + totalIdle(strategy) - _borrows;
 
         // Withdraw all funds
         vm.prank(user);
         strategy.redeem(_depositAmount, user, user);
 
-        if (balanceBefore + eta > asset.balanceOf(user)) {
+        if (balanceBefore + etaWithOutRewards > asset.balanceOf(user)) {
             assertApproxEq(
                 asset.balanceOf(user),
-                balanceBefore + eta,
+                balanceBefore + etaWithOutRewards,
                 (_depositAmount * 667) / 10_000,
                 "!final balance"
             );

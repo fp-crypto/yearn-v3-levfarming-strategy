@@ -7,34 +7,43 @@ import {CErc20I} from "./interfaces/compound/CErc20I.sol";
 import {CTokenI} from "./interfaces/compound/CTokenI.sol";
 
 /// @title Leveraged Compound V2 Strategy
-/// @notice A strategy that uses Compound V2 for leveraged lending/borrowing
-/// @dev Implements flash loans and leveraged positions using Aave V3 protocol
+/// @notice A strategy that uses Compound V2 for leveraged lending/borrowing to maximize yield
+/// @dev Implements leveraged positions using Compound V2's lending/borrowing capabilities
+///      Inherits from BaseLevFarmingStrategy for core leverage farming functionality
+///      Uses cTokens to represent deposits and manage collateral/borrowing positions
 /// @author Generic Leverage Farming Strategy Team
 contract LevCompStrategy is BaseLevFarmingStrategy {
     using SafeERC20 for ERC20;
 
-    // protocol address
-    ComptrollerI public immutable COMPTOLLER;
+    /// @notice The Compound Comptroller contract that manages the money markets
+    ComptrollerI public immutable COMPTROLLER;
+
+    /// @notice The Compound cToken contract representing the supplied asset
     CErc20I public immutable C_TOKEN;
 
+    /// @notice Flag to disable COMP rewards claiming
+    /// @dev When true, _claimRewards() will not claim COMP tokens
     bool public dontClaimComp = false;
 
     /// @notice Initializes the strategy with required addresses and settings
-    /// @param _asset The underlying asset token address
-    /// @param _name The name of the strategy
-    /// @param _cToken The ctoken to use
+    /// @param _cToken The Compound cToken contract address corresponding to the asset
+    /// @param _name The name of the strategy for identification purposes
+    /// @dev Validates that the cToken matches the asset, sets up the Comptroller,
+    ///      configures LTV parameters, and approves token spending
     constructor(
-        address _asset,
-        string memory _name,
-        address _cToken
-    ) BaseLevFarmingStrategy(_asset, _name) {
-        require(CErc20I(_cToken).underlying() == _asset); // dev: not asset
+        address _cToken,
+        string memory _name
+    ) BaseLevFarmingStrategy(CErc20I(_cToken).underlying(), _name) {
         C_TOKEN = CErc20I(_cToken);
-        COMPTOLLER = ComptrollerI(CErc20I(_cToken).comptroller());
+        COMPTROLLER = ComptrollerI(CErc20I(_cToken).comptroller());
+
+        if (asset.decimals() > ERC20(_cToken).decimals()) {
+            minAsset = uint96(10 ** (asset.decimals() - ERC20(_cToken).decimals()));
+        }
 
         _autoConfigureLTVs();
 
-        ERC20(address(_asset)).safeApprove(_cToken, type(uint256).max);
+        ERC20(address(asset)).safeApprove(_cToken, type(uint256).max);
     }
 
     /// @inheritdoc BaseLevFarmingStrategy
@@ -78,16 +87,6 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
         return _amount;
     }
 
-    /// @notice Automatically configures the LTV ratios based on protocol settings
-    /// @dev Sets targetLTV, maxLTV and maxBorrowLTV using protocol values and safety margins
-    function _autoConfigureLTVs() internal {
-        (uint256 ltv, ) = getProtocolLTVs();
-        require(ltv > DEFAULT_COLLAT_TARGET_MARGIN); // dev: !ltv
-        targetLTV = uint64(ltv - DEFAULT_COLLAT_TARGET_MARGIN);
-        maxBorrowLTV = uint64(ltv - DEFAULT_COLLAT_MAX_MARGIN);
-        maxLTV = maxBorrowLTV;
-    }
-
     /// @inheritdoc BaseLevFarmingStrategy
     function _claimRewards() internal virtual override {
         if (dontClaimComp) {
@@ -96,7 +95,7 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
         CTokenI[] memory tokens = new CTokenI[](1);
         tokens[0] = C_TOKEN;
 
-        COMPTOLLER.claimComp(address(this), tokens);
+        COMPTROLLER.claimComp(address(this), tokens);
     }
 
     /// @inheritdoc BaseLevFarmingStrategy
@@ -135,7 +134,7 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
         override
         returns (uint256 ltv, uint256 liquidationThreshold)
     {
-        (, ltv, ) = COMPTOLLER.markets(address(C_TOKEN));
+        (, ltv, ) = COMPTROLLER.markets(address(C_TOKEN));
         liquidationThreshold = ltv;
     }
 }

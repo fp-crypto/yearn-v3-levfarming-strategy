@@ -26,14 +26,14 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @notice Factor used to add pessimism to calculations
     uint256 internal constant PESSIMISM_FACTOR = 1000;
 
-    /// @notice Default target margin for collateral ratio (2%)
-    uint64 internal constant DEFAULT_COLLAT_TARGET_MARGIN = 0.02e18;
+    /// @notice Default target margin for ltv ratio (2%)
+    uint64 internal constant DEFAULT_LTV_TARGET_MARGIN = 0.02e18;
 
-    /// @notice Default maximum margin for collateral ratio (0.5%)
-    uint64 internal constant DEFAULT_COLLAT_MAX_MARGIN = 0.005e18;
+    /// @notice Default maximum margin for ltv ratio (0.5%)
+    uint64 internal constant DEFAULT_LTV_MAX_MARGIN = 0.005e18;
 
-    /// @notice Threshold for liquidation warnings (1%)
-    uint64 internal constant LIQUIDATION_WARNING_THRESHOLD = 0.01e18;
+    /// @notice Default maximum margin for ltv ratio (0.1%)
+    uint64 internal constant DEFAULT_LTV_MAX_BORROW_MARGIN = 0.001e18;
 
     /// @notice Target Loan-to-Value ratio the strategy aims to maintain
     uint64 public targetLTV;
@@ -123,7 +123,10 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @notice Sets the pessimism factor for reward value estimation
     /// @param _rewardPessimismFactor New pessimism factor (1000 = 10%)
     /// @dev Only callable by management
-    function setRewardPessimismFactor(uint16 _rewardPessimismFactor) external onlyManagement {
+    function setRewardPessimismFactor(
+        uint16 _rewardPessimismFactor
+    ) external onlyManagement {
+        require(_rewardPessimismFactor <= MAX_BPS, "!bps");
         rewardPessimismFactor = _rewardPessimismFactor;
     }
 
@@ -166,8 +169,12 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             _leverDownTo(_newBorrow, _deposits, _borrows);
             (_deposits, _borrows) = livePosition();
             _withdrawExcessCollateral(_targetLTV, _deposits, _borrows);
+            //} else if (_amount < minAsset) {
+            //    return;
+            //} else if (_borrows == 0) {
+            //    _withdraw(_amount < _deposits ? _amount : type(uint256).max);
         } else {
-            _withdraw(_amount);
+            _withdraw(Math.min(_amount, _deposits));
         }
     }
 
@@ -197,21 +204,20 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         (uint256 _deposits, uint256 _borrows) = livePosition();
         uint256 _currentLTV = getLTV(_deposits, _borrows);
         uint256 _targetLTV = uint256(targetLTV);
-        uint256 _minAdjustRatio = uint256(minAdjustRatio);
 
         if (_currentLTV < _targetLTV) {
             // we should lever up
-            if (_targetLTV - _currentLTV > _minAdjustRatio) {
+            if (_targetLTV - _currentLTV > uint256(minAdjustRatio)) {
                 // we only act on relevant differences
                 _leverMax();
             }
-        } else if (_currentLTV > targetLTV) {
-            if (_currentLTV - _targetLTV > _minAdjustRatio) {
-                uint256 newBorrow = getBorrowFromSupply(
+        } else if (_currentLTV > _targetLTV) {
+            if (_currentLTV - _targetLTV > uint256(minAdjustRatio)) {
+                uint256 _newBorrows = getBorrowFromSupply(
                     _deposits - _borrows,
                     _targetLTV
                 );
-                _leverDownTo(newBorrow, _deposits, _borrows);
+                _leverDownTo(_newBorrows, _deposits, _borrows);
             }
         }
     }
@@ -260,14 +266,17 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     }
 
     /// @inheritdoc BaseStrategy
-    function _emergencyWithdraw(uint256 _amount) internal override {
+    function _emergencyWithdraw(uint256 _amount) internal virtual override {
         (uint256 _deposits, uint256 _borrows) = livePosition();
-
         if (_borrows > minAsset) {
             _leverDownTo(0, _deposits, _borrows);
         }
         (_deposits, _borrows) = livePosition();
-        if (_borrows == 0) _withdraw(Math.min(_deposits, _amount));
+        if (_borrows == 0) {
+            _withdraw(_amount < _deposits ? _amount : type(uint256).max);
+        } else {
+            _withdrawExcessCollateral(0, _deposits, _borrows);
+        }
     }
 
     /// @notice Emergency function to manually deleverage a position
@@ -367,9 +376,9 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         uint256 realSupply = deposits - borrows + assetBalance;
         uint256 newBorrow = getBorrowFromSupply(realSupply, targetLTV);
         uint256 newDeposit = getDepositFromBorrow(newBorrow, targetLTV);
+
         uint256 maxSupply = _maxSupply();
         if (newDeposit - deposits >= maxSupply) {
-            newDeposit = maxSupply + deposits; //TODO: fix me
             newBorrow = getBorrowFromDeposit(maxSupply, targetLTV);
         }
         uint256 totalAmountToBorrow = newBorrow - borrows;
@@ -452,7 +461,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             uint256 _assetBalance = balanceOfAsset();
             uint256 _remainingRepayAmount = _borrows - _targetAmountBorrowed;
 
-            uint256 _maxLTV = maxLTV;
+            uint256 _maxBorrowLTV = maxBorrowLTV;
             uint8 _maxIterations = maxIterations;
 
             for (
@@ -461,7 +470,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
                 i++
             ) {
                 uint256 _withdrawn = _withdrawExcessCollateral(
-                    _maxLTV,
+                    _maxBorrowLTV,
                     _deposits,
                     _borrows
                 );
@@ -502,12 +511,26 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         uint256 collatRatio,
         uint256 deposits,
         uint256 borrows
-    ) internal returns (uint256 amount) {
+    ) internal virtual returns (uint256 amount) {
+        if (borrows == 0) {
+            return _withdraw(type(uint256).max);
+        }
+
         uint256 theoDeposits = getDepositFromBorrow(borrows, collatRatio);
         if (deposits > theoDeposits) {
             uint256 toWithdraw = deposits - theoDeposits;
-            return _withdraw(toWithdraw);
+            if (toWithdraw > minAsset) return _withdraw(toWithdraw);
         }
+    }
+
+    /// @notice Automatically configures the LTV ratios based on protocol settings
+    /// @dev Sets targetLTV, maxLTV and maxBorrowLTV using protocol values and safety margins
+    function _autoConfigureLTVs() internal virtual {
+        (uint256 ltv, uint256 liquidationThreshold) = getProtocolLTVs();
+        require(ltv > DEFAULT_LTV_TARGET_MARGIN); // dev: !ltv
+        targetLTV = uint64(ltv) - DEFAULT_LTV_TARGET_MARGIN;
+        maxLTV = uint64(liquidationThreshold) - DEFAULT_LTV_MAX_MARGIN;
+        maxBorrowLTV = uint64(ltv) - DEFAULT_LTV_MAX_BORROW_MARGIN;
     }
 
     /// @notice Gets the current balance of asset token held by this contract
@@ -523,8 +546,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         internal
         view
         virtual
-        returns (uint256 ltv, uint256 liquidationThreshold)
-    {}
+        returns (uint256 ltv, uint256 liquidationThreshold);
 
     /// @notice Returns the estimated deposits and borrows from the lending platform
     /// @return deposits Estimated amount of asset tokens deposited
@@ -535,8 +557,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         public
         view
         virtual
-        returns (uint256 deposits, uint256 borrows)
-    {}
+        returns (uint256 deposits, uint256 borrows);
 
     /// @notice Returns the current deposits and borrows from the lending platform
     /// @return deposits Current amount of asset tokens deposited
@@ -546,8 +567,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     function livePosition()
         public
         virtual
-        returns (uint256 deposits, uint256 borrows)
-    {}
+        returns (uint256 deposits, uint256 borrows);
 
     /// @notice Gets the estimated LTV ratio based on current position
     /// @return _estimatedLTV Current estimated LTV ratio

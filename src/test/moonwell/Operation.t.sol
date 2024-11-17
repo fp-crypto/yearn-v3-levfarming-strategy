@@ -132,15 +132,21 @@ contract OperationTest is Setup {
         bool _profit
     ) public {
         _depositAmount = bound(_depositAmount, minFuzzAmount, maxFuzzAmount);
-        _withdrawAmount = bound(_withdrawAmount, 1e18, _depositAmount - 1e18);
+        _withdrawAmount = bound(
+            _withdrawAmount,
+            minFuzzAmount / 2,
+            _depositAmount - (minFuzzAmount / 2)
+        );
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _depositAmount);
+        logStrategyInfo();
 
         // tend to deploy funds
         vm.prank(keeper);
         strategy.tend();
         checkLTV(false);
+        logStrategyInfo();
 
         checkStrategyTotals(strategy, _depositAmount, _depositAmount, 0);
 
@@ -159,11 +165,14 @@ contract OperationTest is Setup {
             strategy.estimatedTotalAssets(),
             strategy.totalAssets()
         );
+        logStrategyInfo();
 
         // Withdraw some funds
+        console.log("Redeeming: %e", _withdrawAmount);
         vm.prank(user);
         strategy.redeem(_withdrawAmount, user, user);
         checkLTV(true, true);
+        logStrategyInfo();
 
         assertLe(
             asset.balanceOf(user),
@@ -255,11 +264,23 @@ contract OperationTest is Setup {
         uint64 _endingLtv
     ) public {
         _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
-        if (_startingLtv != 0 ){
-            _startingLtv = uint64(bound(_startingLtv, strategy.minAdjustRatio(), strategy.targetLTV()));
+        if (_startingLtv != 0) {
+            _startingLtv = uint64(
+                bound(
+                    _startingLtv,
+                    strategy.minAdjustRatio(),
+                    strategy.targetLTV()
+                )
+            );
         }
-        if (_endingLtv != 0 ){
-            _endingLtv = uint64(bound(_endingLtv, strategy.minAdjustRatio(), strategy.targetLTV()));
+        if (_endingLtv != 0) {
+            _endingLtv = uint64(
+                bound(
+                    _endingLtv,
+                    strategy.minAdjustRatio(),
+                    strategy.targetLTV()
+                )
+            );
         }
 
         vm.startPrank(management);

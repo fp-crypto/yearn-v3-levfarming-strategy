@@ -33,7 +33,7 @@ contract LevMoonwellStrategyFactory is BaseLevFarmingStrategyFactory {
         // We need to use the custom interface with the
         // tokenized strategies available setters.
         IStrategyInterface _newStrategy = IStrategyInterface(
-            address(new LevMoonwellStrategy(_asset, _name, _cToken))
+            address(new LevMoonwellStrategy(_cToken, _name))
         );
 
         _newStrategy.setKeeper(keeper);

@@ -52,15 +52,14 @@ contract ManualFunctionsTest is Setup {
         ) {
             console.log("supply: %d", supply);
             console.log("borrow: %d", borrow);
-            uint256 theoMinSupply = (borrow * 1e18) /
-                (strategy.maxBorrowLTV() - 0.005e18);
+            uint256 theoMinSupply = (borrow * 1e18) / strategy.maxBorrowLTV();
             console.log("theoMinSupply: %d", theoMinSupply);
             uint256 stepSize = supply > theoMinSupply
                 ? supply - theoMinSupply
                 : borrow;
             console.log("stepSize: %d", stepSize);
             vm.prank(management);
-            strategy.manualDeleverage(stepSize);
+            strategy.manualDeleverage(Math.min(stepSize, borrow));
             logStrategyInfo();
         }
 
@@ -69,7 +68,7 @@ contract ManualFunctionsTest is Setup {
         checkLTV(true, false, 0);
 
         vm.prank(management);
-        strategy.manualReleaseWant(supply);
+        strategy.manualReleaseWant(type(uint256).max);
         logStrategyInfo();
         (supply, borrow) = strategy.livePosition();
         assertEq(supply, 0);

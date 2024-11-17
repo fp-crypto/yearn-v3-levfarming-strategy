@@ -68,8 +68,6 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
         ERC20(address(_aToken)).safeApprove(address(POOL), type(uint256).max);
     }
 
-
-
     /// @notice Enables or disables flash loan functionality
     /// @param _flashloanEnabled True to enable flash loans, false to disable
     function setFlashloanEnabled(
@@ -199,16 +197,6 @@ contract LevAaveStrategy is BaseLevFarmingStrategy, IFlashLoanReceiver {
     //     if (_emodeCategory == 0) return;
     //     POOL.setUserEMode(_enableEmode ? _emodeCategory : 0);
     // }
-
-    /// @notice Automatically configures the LTV ratios based on protocol settings
-    /// @dev Sets targetLTV, maxLTV and maxBorrowLTV using protocol values and safety margins
-    function _autoConfigureLTVs() internal {
-        (uint256 ltv, uint256 liquidationThreshold) = getProtocolLTVs();
-        require(ltv > DEFAULT_COLLAT_TARGET_MARGIN); // dev: !ltv
-        targetLTV = uint64(ltv) - DEFAULT_COLLAT_TARGET_MARGIN;
-        maxLTV = uint64(liquidationThreshold) - DEFAULT_COLLAT_MAX_MARGIN;
-        maxBorrowLTV = uint64(ltv) - DEFAULT_COLLAT_MAX_MARGIN;
-    }
 
     /// @notice Callback function called by Aave after flash loan
     /// @dev This function is called after your contract has received the flash loaned amount

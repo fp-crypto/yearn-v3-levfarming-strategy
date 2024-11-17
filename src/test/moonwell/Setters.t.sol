@@ -17,7 +17,9 @@ contract SettersTest is Setup {
         uint8 _maxIterations,
         uint64 _minAdjustRatio,
         uint96 _minAsset,
-        uint96 _minRewardSell
+        uint96 _minRewardSell,
+        uint16 _rewardPessimismFactor,
+        int24 _tickSpacing
     ) public {
         vm.expectRevert("!management");
         strategy.setLTVs(_targetLTV, _maxBorrowLTV, _maxLTV);
@@ -62,5 +64,20 @@ contract SettersTest is Setup {
         vm.prank(management);
         strategy.setMinRewardSell(_minRewardSell);
         assertEq(_minRewardSell, strategy.minRewardSell());
+
+        vm.expectRevert("!management");
+        strategy.setRewardPessimismFactor(_rewardPessimismFactor);
+        vm.startPrank(management);
+        if (_rewardPessimismFactor > 1e4) vm.expectRevert();
+        strategy.setRewardPessimismFactor(_rewardPessimismFactor);
+        if (_rewardPessimismFactor <= 1e4)
+            assertEq(_rewardPessimismFactor, strategy.rewardPessimismFactor());
+        vm.stopPrank();
+
+        vm.expectRevert("!management");
+        strategy.setWethToAssetSwapTickSpacing(_tickSpacing);
+        vm.prank(management);
+        strategy.setWethToAssetSwapTickSpacing(_tickSpacing);
+        assertEq(_tickSpacing, strategy.wethToAssetSwapTickSpacing());
     }
 }

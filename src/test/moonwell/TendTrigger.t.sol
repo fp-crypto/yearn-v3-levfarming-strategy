@@ -26,8 +26,8 @@ contract TendTriggerTest is Setup {
         // Skip some time until we surpass the minAdjustRatio
         for (
             ;
-            strategy.estimatedLTV() < strategy.targetLTV() ||
-                strategy.estimatedLTV() - strategy.targetLTV() <
+            strategy.liveLTV() < strategy.targetLTV() ||
+                strategy.liveLTV() - strategy.targetLTV() <
                 strategy.minAdjustRatio();
 
         ) {
@@ -48,8 +48,8 @@ contract TendTriggerTest is Setup {
         // Skip some time until we surpass the warning threshold
         for (
             ;
-            strategy.estimatedLTV() < strategy.targetLTV() ||
-                strategy.estimatedLTV() < strategy.maxLTV();
+            strategy.liveLTV() < strategy.targetLTV() ||
+                strategy.liveLTV() < strategy.maxLTV();
 
         ) {
             skip(7 days);

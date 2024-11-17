@@ -12,11 +12,18 @@ interface ISwapRouterWithFactory is ISwapRouter {
 }
 
 /// @title Library for simulating swaps on CL aka slipstream (Uniswap v3 fork)
+/// @notice Provides functions to simulate swap outcomes without executing actual transactions
+/// @dev Uses Uniswap v3 style concentrated liquidity pools for price calculations
 library CLSwapSimulator {
+    /// @notice Simulates a single exact input swap without executing the actual swap
+    /// @param router The swap router contract to use for the simulation
+    /// @param params The parameters for the exact input single swap
+    /// @return amountOut The expected output amount from the simulated swap
+    /// @dev Uses the pool's current state to calculate the expected output amount
     function simulateExactInputSingle(
         ISwapRouter router,
         ISwapRouter.ExactInputSingleParams memory params
-    ) internal view returns (uint256 amountOut) {
+    ) external view returns (uint256 amountOut) {
         bool zeroForOne = params.tokenIn < params.tokenOut;
         ICLPool pool = getPool(router, params.tokenIn, params.tokenOut, 1);
         (int256 _amount0, int256 _amount1) = Simulate.simulateSwap(

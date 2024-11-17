@@ -243,12 +243,12 @@ library Simulate {
     /// @param tick The tick for which to compute the position
     /// @return wordPos The key in the mapping containing the word in which the bit is stored
     /// @return bitPos The bit position in the word where the flag is stored
-    function tickBitmapPosition(int24 tick) private pure returns (int16 wordPos, uint8 bitPos) {
+    function tickBitmapPosition(
+        int24 tick
+    ) private pure returns (int16 wordPos, uint8 bitPos) {
         unchecked {
             wordPos = int16(tick >> 8);
             bitPos = uint8(int8(tick % 256));
         }
     }
-
-
 }

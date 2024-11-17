@@ -25,20 +25,29 @@ contract LevMoonwellStrategy is LevCompStrategy {
     address private constant AERODROME_FACTORY =
         0x420DD381b31aEf6683db6B902084cB0FFECe40Da;
 
-    int24 private wethToAssetSwapTickSpacing = 1;
+    int24 public wethToAssetSwapTickSpacing = 1;
 
 
     /// @notice Initializes the strategy with required addresses and settings
-    /// @param _asset The underlying asset token address
-    /// @param _name The name of the strategy
     /// @param _cToken The ctoken to use
+    /// @param _name The name of the strategy
     constructor(
-        address _asset,
-        string memory _name,
-        address _cToken
-    ) LevCompStrategy(_asset, _name, _cToken) {
+        address _cToken,
+        string memory _name
+    ) LevCompStrategy(_cToken, _name) {
+        maxIterations = 30;
+
         WELL.safeApprove(address(AERODROME_ROUTER), type(uint256).max);
         WETH.safeApprove(address(SLIPSTREAM_ROUTER), type(uint256).max);
+    }
+
+    /// @notice Sets tick spacing for WETH -> Asset swap 
+    /// @param _wethToAssetSwapTickSpacing Tick spacing
+    /// @dev Only callable by management
+    function setWethToAssetSwapTickSpacing(
+        int24 _wethToAssetSwapTickSpacing
+    ) external onlyManagement {
+        wethToAssetSwapTickSpacing = _wethToAssetSwapTickSpacing;
     }
 
     /// @inheritdoc BaseLevFarmingStrategy
@@ -49,7 +58,7 @@ contract LevMoonwellStrategy is LevCompStrategy {
         address[] memory tokens = new address[](1);
         tokens[0] = address(C_TOKEN);
 
-        MoonwellComptrollerI(address(COMPTOLLER)).claimReward(
+        MoonwellComptrollerI(address(COMPTROLLER)).claimReward(
             address(this),
             tokens
         );
@@ -82,7 +91,7 @@ contract LevMoonwellStrategy is LevCompStrategy {
     }
 
     function _maxBorrow() internal view override returns (uint256) {
-        uint256 _borrowCap = MoonwellComptrollerI(address(COMPTOLLER))
+        uint256 _borrowCap = MoonwellComptrollerI(address(COMPTROLLER))
             .borrowCaps(address(C_TOKEN));
         uint256 _totalBorrows = C_TOKEN.totalBorrows();
         if (_totalBorrows >= _borrowCap) return 0;
@@ -90,7 +99,7 @@ contract LevMoonwellStrategy is LevCompStrategy {
     }
 
     function _maxSupply() internal view override returns (uint256) {
-        uint256 _supplyCap = MoonwellComptrollerI(address(COMPTOLLER))
+        uint256 _supplyCap = MoonwellComptrollerI(address(COMPTROLLER))
             .supplyCaps(address(C_TOKEN));
         uint256 _totalSupplied = C_TOKEN.getCash() +
             C_TOKEN.totalBorrows() -
@@ -133,7 +142,7 @@ contract LevMoonwellStrategy is LevCompStrategy {
         returns (uint256 _outstandingRewards)
     {
         IMultiRewardDistributor _rewardDistributor = MoonwellComptrollerI(
-            address(COMPTOLLER)
+            address(COMPTROLLER)
         ).rewardDistributor();
         IMultiRewardDistributor.RewardInfo[]
             memory rewardInfo = _rewardDistributor.getOutstandingRewardsForUser(
@@ -155,7 +164,7 @@ contract LevMoonwellStrategy is LevCompStrategy {
         override
         returns (uint256 ltv, uint256 liquidationThreshold)
     {
-        (, ltv) = MoonwellComptrollerI(address(COMPTOLLER)).markets(
+        (, ltv) = MoonwellComptrollerI(address(COMPTROLLER)).markets(
             address(C_TOKEN)
         );
         liquidationThreshold = ltv;

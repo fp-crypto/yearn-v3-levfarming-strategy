@@ -4,21 +4,23 @@ pragma solidity ^0.8.18;
 import {IBaseHealthCheck} from "@periphery/Bases/HealthCheck/IBaseHealthCheck.sol";
 
 interface IStrategyInterface is IBaseHealthCheck {
-    function targetLTV() external returns (uint64);
+    function targetLTV() external view returns (uint64);
 
-    function maxBorrowLTV() external returns (uint64);
+    function maxBorrowLTV() external view returns (uint64);
 
-    function maxLTV() external returns (uint64);
+    function maxLTV() external view returns (uint64);
 
-    function minAsset() external returns (uint96);
+    function minAsset() external view returns (uint96);
 
-    function minAdjustRatio() external returns (uint64);
+    function minAdjustRatio() external view returns (uint64);
 
-    function minRewardSell() external returns (uint96);
+    function minRewardSell() external view returns (uint96);
 
-    function maxIterations() external returns (uint8);
+    function maxIterations() external view returns (uint8);
 
-    function maxTendBasefeeGwei() external returns (uint16);
+    function maxTendBasefeeGwei() external view returns (uint16);
+    
+    function rewardPessimismFactor() external view returns (uint16);
 
     function estimatedPosition()
         external
@@ -59,7 +61,7 @@ interface IStrategyInterface is IBaseHealthCheck {
 
     function setMinRewardSell(uint96 _minRewardSell) external;
 
-    function setRewardPessimismFactor(uint64 _rewardPessimismFactory) external;
+    function setRewardPessimismFactor(uint16 _rewardPessimismFactor) external;
 
     function manualDeleverage(uint256 _amount) external;
 
