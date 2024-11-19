@@ -53,15 +53,15 @@ contract LevCompStrategyAprOracle is AprOracleBase {
         int256 _netApr = ((int256(supplyRatePerSec * futureSupply) -
             int256(borrowRatePerSec * futureBorrow)) * 365 days) / netAssets;
 
-        _netApr += int256(
-            getAprFromRewards(
-                _strategy,
-                futureSupply,
-                futureBorrow,
-                cash,
-                borrows
-            )
+        uint256 _rewardsApr = getAprFromRewards(
+            _strategy,
+            futureSupply,
+            futureBorrow,
+            cash,
+            borrows
         );
+
+        _netApr += int256(_rewardsApr);
 
         return _netApr > 0 ? uint256(_netApr) : 0;
     }

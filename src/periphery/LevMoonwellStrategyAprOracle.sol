@@ -9,6 +9,8 @@ import {ComptrollerI} from "../interfaces/moonwell/ComptrollerI.sol";
 import {IRouter as IAeroRouter} from "../interfaces/velo/IRouter.sol";
 import {CLSwapSimulator, ISwapRouter} from "../libraries/CLSwapSimulator.sol";
 
+import "forge-std/console.sol";
+
 contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
     ERC20 public constant WETH =
         ERC20(0x4200000000000000000000000000000000000006);
@@ -23,7 +25,9 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
     address private constant AERODROME_FACTORY =
         0x420DD381b31aEf6683db6B902084cB0FFECe40Da;
 
-    constructor() LevCompStrategyAprOracle() {}
+    constructor() LevCompStrategyAprOracle() {
+        name = "LevMoonwell APR Oracle";
+    }
 
     function getAprFromRewards(
         address _strategy,
@@ -64,7 +68,9 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
                     .wethToAssetSwapTickSpacing()
             ) * 365 days) / 7 days);
 
-            _apr = (_wethRewardsInAssetPerYear * 1e18) / (_ourSupply - _ourBorrows);
+            _apr =
+                (_wethRewardsInAssetPerYear * 1e18) /
+                (_ourSupply - _ourBorrows);
         }
 
         IMultiRewardDistributor.MarketConfig
@@ -73,7 +79,10 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
                 address(USDC)
             );
 
-        if (_marketConfgidUsdc.supplyEmissionsPerSec != 0 || _marketConfgidUsdc.borrowEmissionsPerSec != 0) {
+        if (
+            _marketConfgidUsdc.supplyEmissionsPerSec != 0 ||
+            _marketConfgidUsdc.borrowEmissionsPerSec != 0
+        ) {
             uint256 _usdcPerSecond = (_ourSupply *
                 _marketConfgidUsdc.supplyEmissionsPerSec) /
                 (_cash + _totalBorrows - cToken.totalReserves());
@@ -94,12 +103,14 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
                         _usdcPerSecond * 7 days,
                         ILevMoonwellStrategyInterface(_strategy).asset(),
                         ILevMoonwellStrategyInterface(_strategy)
-                            .wethToAssetSwapTickSpacing()
+                            .usdcToAssetSwapTickSpacing()
                     ) * 365 days) /
                     7 days;
             }
 
-            _apr += (_usdcRewardsInAssetPerYear * 1e18) / (_ourSupply - _ourBorrows);
+            _apr +=
+                (_usdcRewardsInAssetPerYear * 1e18) /
+                (_ourSupply - _ourBorrows);
         }
     }
 
@@ -108,7 +119,7 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
         address _asset,
         int24 _tickSpacing
     ) private view returns (uint256) {
-        if (_wellAmount == 0 || _tickSpacing == 0) {
+        if (_wellAmount == 0) {
             return 0;
         }
 
@@ -123,7 +134,7 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
         );
 
         if (_asset == address(WETH)) return outs[outs.length - 1];
-        if (outs[outs.length - 1] == 0) return 0;
+        if (outs[outs.length - 1] == 0 || _tickSpacing == 0) return 0;
 
         return
             CLSwapSimulator.simulateExactInputSingle(
