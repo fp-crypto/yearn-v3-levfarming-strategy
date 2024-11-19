@@ -19,18 +19,18 @@ contract LevCompStrategyAprOracle is AprOracleBase {
     function aprAfterDebtChange(
         address _strategy,
         int256 _delta
-    ) external view override returns (uint256 _apr) {
+    ) external view override returns (uint256) {
         (
             uint256 currentSupply,
             uint256 currentBorrow
         ) = ILevCompStrategyInterface(_strategy).estimatedPosition();
-        uint256 netAssets = uint256(
-            int256(currentSupply - currentBorrow) + _delta
-        );
-        if (int256(netAssets) <= -_delta) return 0;
+
+        int256 netAssets = int256(currentSupply - currentBorrow) + _delta;
+
+        if (netAssets <= 0) return 0;
 
         (uint256 futureSupply, uint256 futureBorrow) = getSupplyBorrowFromLTV(
-            netAssets,
+            uint256(netAssets),
             uint256(ILevCompStrategyInterface(_strategy).targetLTV())
         );
 
@@ -48,26 +48,22 @@ contract LevCompStrategyAprOracle is AprOracleBase {
         (
             uint256 supplyRatePerSec,
             uint256 borrowRatePerSec
-        ) = getSupplyBorrowRatePerSec(
-                cToken,
+        ) = getSupplyBorrowRatePerSec(cToken, cash, borrows);
+
+        int256 _netApr = ((int256(supplyRatePerSec * futureSupply) -
+            int256(borrowRatePerSec * futureBorrow)) * 365 days) / netAssets;
+
+        _netApr += int256(
+            getAprFromRewards(
+                _strategy,
+                futureSupply,
+                futureBorrow,
                 cash,
                 borrows
-            );
-
-        _apr =
-            uint256(
-                (int256(supplyRatePerSec * futureSupply) -
-                    int256(borrowRatePerSec * futureBorrow)) * 365 days
-            ) /
-            netAssets;
-
-        _apr += getAprFromRewards(
-            _strategy,
-            futureSupply,
-            futureBorrow,
-            cash,
-            borrows
+            )
         );
+
+        return _netApr > 0 ? uint256(_netApr) : 0;
     }
 
     function getSupplyBorrowRatePerSec(
@@ -95,7 +91,7 @@ contract LevCompStrategyAprOracle is AprOracleBase {
     function getSupplyBorrowFromLTV(
         uint256 cash,
         uint256 ltv
-    ) internal view returns (uint256 supply, uint256 borrow) {
+    ) internal pure returns (uint256 supply, uint256 borrow) {
         uint256 leverage = 1e36 / (1e18 - ltv);
         supply = (cash * leverage) / 1e18;
         borrow = (cash * (leverage - 1e18)) / 1e18;

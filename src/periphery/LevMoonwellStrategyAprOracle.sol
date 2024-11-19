@@ -12,6 +12,8 @@ import {CLSwapSimulator, ISwapRouter} from "../libraries/CLSwapSimulator.sol";
 contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
     ERC20 public constant WETH =
         ERC20(0x4200000000000000000000000000000000000006);
+    ERC20 public constant USDC =
+        ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
     ERC20 public constant WELL =
         ERC20(0xA88594D404727625A9437C3f886C7643872296AE);
     IAeroRouter public constant AERODROME_ROUTER =
@@ -39,26 +41,66 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
         ).rewardDistributor();
 
         IMultiRewardDistributor.MarketConfig
-            memory _marketConfig = _rewardDistributor.getConfigForMarket(
+            memory _marketConfigWeth = _rewardDistributor.getConfigForMarket(
                 cToken,
                 address(WELL)
             );
 
-        uint256 _wellPerSecond = (_ourSupply *
-            _marketConfig.supplyEmissionsPerSec) /
-            (_cash + _totalBorrows - cToken.totalReserves());
-        _wellPerSecond +=
-            (_ourBorrows * _marketConfig.borrowEmissionsPerSec) /
-            _totalBorrows;
+        if (
+            _marketConfigWeth.supplyEmissionsPerSec != 0 ||
+            _marketConfigWeth.borrowEmissionsPerSec != 0
+        ) {
+            uint256 _wellPerSecond = (_ourSupply *
+                _marketConfigWeth.supplyEmissionsPerSec) /
+                (_cash + _totalBorrows - cToken.totalReserves());
+            _wellPerSecond +=
+                (_ourBorrows * _marketConfigWeth.borrowEmissionsPerSec) /
+                _totalBorrows;
 
-        _apr =
-            (estimatedWellInAsset(
+            uint256 _wethRewardsInAssetPerYear = ((estimatedWellInAsset(
                 _wellPerSecond * 7 days,
                 ILevMoonwellStrategyInterface(_strategy).asset(),
                 ILevMoonwellStrategyInterface(_strategy)
                     .wethToAssetSwapTickSpacing()
-            ) * 52) /
-            (_ourSupply - _ourBorrows);
+            ) * 365 days) / 7 days);
+
+            _apr = (_wethRewardsInAssetPerYear * 1e18) / (_ourSupply - _ourBorrows);
+        }
+
+        IMultiRewardDistributor.MarketConfig
+            memory _marketConfgidUsdc = _rewardDistributor.getConfigForMarket(
+                cToken,
+                address(USDC)
+            );
+
+        if (_marketConfgidUsdc.supplyEmissionsPerSec != 0 || _marketConfgidUsdc.borrowEmissionsPerSec != 0) {
+            uint256 _usdcPerSecond = (_ourSupply *
+                _marketConfgidUsdc.supplyEmissionsPerSec) /
+                (_cash + _totalBorrows - cToken.totalReserves());
+            _usdcPerSecond +=
+                (_ourBorrows * _marketConfgidUsdc.borrowEmissionsPerSec) /
+                _totalBorrows;
+
+            uint256 _usdcRewardsInAssetPerYear;
+
+            if (
+                ILevMoonwellStrategyInterface(_strategy).asset() ==
+                address(USDC)
+            ) {
+                _usdcRewardsInAssetPerYear = _usdcPerSecond * 365 days;
+            } else {
+                _usdcRewardsInAssetPerYear =
+                    (estimatedUsdcInAsset(
+                        _usdcPerSecond * 7 days,
+                        ILevMoonwellStrategyInterface(_strategy).asset(),
+                        ILevMoonwellStrategyInterface(_strategy)
+                            .wethToAssetSwapTickSpacing()
+                    ) * 365 days) /
+                    7 days;
+            }
+
+            _apr += (_usdcRewardsInAssetPerYear * 1e18) / (_ourSupply - _ourBorrows);
+        }
     }
 
     function estimatedWellInAsset(
@@ -66,7 +108,7 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
         address _asset,
         int24 _tickSpacing
     ) private view returns (uint256) {
-        if (_wellAmount == 0) {
+        if (_wellAmount == 0 || _tickSpacing == 0) {
             return 0;
         }
 
@@ -93,6 +135,31 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
                     recipient: address(0),
                     deadline: block.timestamp,
                     amountIn: outs[outs.length - 1],
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            );
+    }
+
+    function estimatedUsdcInAsset(
+        uint256 _usdcAmount,
+        address _asset,
+        int24 _tickSpacing
+    ) private view returns (uint256) {
+        if (_usdcAmount == 0 || _tickSpacing == 0) {
+            return 0;
+        }
+
+        return
+            CLSwapSimulator.simulateExactInputSingle(
+                ISwapRouter(SLIPSTREAM_ROUTER),
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: address(USDC),
+                    tokenOut: _asset,
+                    tickSpacing: _tickSpacing,
+                    recipient: address(0),
+                    deadline: block.timestamp,
+                    amountIn: _usdcAmount,
                     amountOutMinimum: 0,
                     sqrtPriceLimitX96: 0
                 })
