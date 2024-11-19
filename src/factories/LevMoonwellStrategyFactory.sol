@@ -14,7 +14,9 @@ contract LevMoonwellStrategyFactory is BaseLevFarmingStrategyFactory {
 
     /// @notice Creates a new factory instance
     /// @param _keeper The initial keeper address
-    constructor(address _keeper) BaseLevFarmingStrategyFactory(_keeper) {}
+    constructor(address _keeper) BaseLevFarmingStrategyFactory(_keeper) {
+        SMS = 0x01fE3347316b2223961B20689C65eaeA71348e93;
+    }
 
     /// @notice Deploy a new strategy with a custom Moonwell addresses provider
     /// @dev This will initialize the strategy with proper permissions and settings
@@ -23,7 +25,9 @@ contract LevMoonwellStrategyFactory is BaseLevFarmingStrategyFactory {
     /// @return Address of the newly deployed strategy
     function newStrategy(
         address _cToken,
-        string memory _name
+        string memory _name,
+        int24 _wethToAssetSwapTickSpacing,
+        int24 _usdcToAssetSwapTickSpacing
     ) public returns (address) {
         address _asset = CErc20I(_cToken).underlying();
 
@@ -33,7 +37,14 @@ contract LevMoonwellStrategyFactory is BaseLevFarmingStrategyFactory {
         // We need to use the custom interface with the
         // tokenized strategies available setters.
         IStrategyInterface _newStrategy = IStrategyInterface(
-            address(new LevMoonwellStrategy(_cToken, _name))
+            address(
+                new LevMoonwellStrategy(
+                    _cToken,
+                    _name,
+                    _wethToAssetSwapTickSpacing,
+                    _usdcToAssetSwapTickSpacing
+                )
+            )
         );
 
         _newStrategy.setKeeper(keeper);

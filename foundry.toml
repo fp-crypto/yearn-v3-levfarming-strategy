@@ -12,6 +12,7 @@ remappings = [
     "@tokenized-strategy/=lib/tokenized-strategy/src/",
     "@periphery/=lib/tokenized-strategy-periphery/src/",
     "@slipstream=lib/slipstream/contracts/",
+    "@createx-forge/=lib/createx-forge/",
 ]
 
 no-match-path = 'src/test/aave/*' # skip aave tests while we work on moonwell

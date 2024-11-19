@@ -1,8 +1,8 @@
 -include .env
 
 # deps
-update:; forge update
 build  :; forge build
+update:; forge update
 size  :; forge build --sizes
 
 # storage inspection

@@ -217,11 +217,11 @@ contract OperationTest is Setup {
         _initialAmount = bound(
             _initialAmount,
             minFuzzAmount,
-            maxFuzzAmount - 1e18
+            maxFuzzAmount - strategy.minAsset()
         );
         _subsequentAmount = bound(
             _subsequentAmount,
-            1e18,
+            strategy.minAsset(),
             maxFuzzAmount - _initialAmount
         );
 

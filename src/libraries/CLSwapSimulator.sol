@@ -2,13 +2,16 @@
 pragma solidity ^0.8.0;
 
 import {ICLPool} from "@slipstream/core/interfaces/ICLPool.sol";
-import {ICLFactory} from "@slipstream/core/interfaces/ICLFactory.sol";
 import {Simulate, TickMath} from "./CLSwapSimulatorCore.sol";
 import {ISwapRouter} from "@slipstream/periphery/interfaces/ISwapRouter.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 interface ISwapRouterWithFactory is ISwapRouter {
     function factory() external view returns (address);
+}
+
+interface ICLFactory {
+    function poolImplementation() external view returns (address);
 }
 
 /// @title Library for simulating swaps on CL aka slipstream (Uniswap v3 fork)
@@ -25,7 +28,12 @@ library CLSwapSimulator {
         ISwapRouter.ExactInputSingleParams memory params
     ) external view returns (uint256 amountOut) {
         bool zeroForOne = params.tokenIn < params.tokenOut;
-        ICLPool pool = getPool(router, params.tokenIn, params.tokenOut, 1);
+        ICLPool pool = getPool(
+            router,
+            params.tokenIn,
+            params.tokenOut,
+            params.tickSpacing
+        );
         (int256 _amount0, int256 _amount1) = Simulate.simulateSwap(
             pool,
             zeroForOne,

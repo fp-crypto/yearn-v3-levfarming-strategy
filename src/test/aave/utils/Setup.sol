@@ -5,7 +5,7 @@ import "forge-std/console.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
 import {LevAaveStrategy as Strategy, ERC20} from "../../../LevAaveStrategy.sol";
-import {LevAaveStrategyFactory as StrategyFactory} from "../../../factory/LevAaveStrategyFactory.sol";
+import {LevAaveStrategyFactory as StrategyFactory} from "../../../factories/LevAaveStrategyFactory.sol";
 import {ILevAaveStrategyInterface} from "../../../interfaces/ILevAaveStrategyInterface.sol";
 
 import {IACLManager} from "../../../interfaces/aave/v3/core/IACLManager.sol";

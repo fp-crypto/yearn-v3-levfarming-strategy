@@ -19,7 +19,8 @@ contract SettersTest is Setup {
         uint96 _minAsset,
         uint96 _minRewardSell,
         uint16 _rewardPessimismFactor,
-        int24 _tickSpacing
+        int24 _wethTickSpacing,
+        int24 _usdcTickSpacing
     ) public {
         vm.expectRevert("!management");
         strategy.setLTVs(_targetLTV, _maxBorrowLTV, _maxLTV);
@@ -75,9 +76,15 @@ contract SettersTest is Setup {
         vm.stopPrank();
 
         vm.expectRevert("!management");
-        strategy.setWethToAssetSwapTickSpacing(_tickSpacing);
+        strategy.setWethToAssetSwapTickSpacing(_wethTickSpacing);
         vm.prank(management);
-        strategy.setWethToAssetSwapTickSpacing(_tickSpacing);
-        assertEq(_tickSpacing, strategy.wethToAssetSwapTickSpacing());
+        strategy.setWethToAssetSwapTickSpacing(_wethTickSpacing);
+        assertEq(_wethTickSpacing, strategy.wethToAssetSwapTickSpacing());
+
+        vm.expectRevert("!management");
+        strategy.setUsdcToAssetSwapTickSpacing(_usdcTickSpacing);
+        vm.prank(management);
+        strategy.setUsdcToAssetSwapTickSpacing(_usdcTickSpacing);
+        assertEq(_usdcTickSpacing, strategy.usdcToAssetSwapTickSpacing());
     }
 }

@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import {ERC20} from "@tokenized-strategy/BaseStrategy.sol";
-import {BaseHealthCheck, BaseStrategy} from "@periphery/Bases/HealthCheck/BaseHealthCheck.sol";
-
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {BaseHealthCheck, BaseStrategy, ERC20} from "@periphery/Bases/HealthCheck/BaseHealthCheck.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 

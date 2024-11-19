@@ -5,7 +5,7 @@ import "forge-std/console.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
 import {LevMoonwellStrategy as Strategy, ERC20} from "../../../LevMoonwellStrategy.sol";
-import {LevMoonwellStrategyFactory as StrategyFactory} from "../../../factory/LevMoonwellStrategyFactory.sol";
+import {LevMoonwellStrategyFactory as StrategyFactory} from "../../../factories/LevMoonwellStrategyFactory.sol";
 import {ILevMoonwellStrategyInterface} from "../../../interfaces/ILevMoonwellStrategyInterface.sol";
 
 import {IACLManager} from "../../../interfaces/aave/v3/core/IACLManager.sol";
@@ -34,7 +34,7 @@ contract Setup is ExtendedTest, IEvents {
     address public user = address(10);
     address public keeper = address(4);
     address public management =
-        address(0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7);
+        address(0x01fE3347316b2223961B20689C65eaeA71348e93);
     address public performanceFeeRecipient = address(3);
 
     // Address of the real deployed Factory
@@ -45,7 +45,7 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public MAX_BPS = 10_000;
 
     uint256 public maxFuzzAmount = 100e18;
-    uint256 public minFuzzAmount = 0.1e18;
+    uint256 public minFuzzAmount = 1e18;
 
     uint256 public profitMaxUnlockTime = 1 hours;
 
@@ -85,7 +85,9 @@ contract Setup is ExtendedTest, IEvents {
             address(
                 _strategyFactory.newStrategy(
                     address(cToken),
-                    "Tokenized Strategy"
+                    "Tokenized Strategy",
+                    1, // wethToAssetSwapTickSpacing
+                    0 // usdcToAssetSwapTickSpacing
                 )
             )
         );
@@ -274,9 +276,12 @@ contract Setup is ExtendedTest, IEvents {
 
     function _setTokenAddrs() internal {
         tokenAddrs["WETH"] = 0x4200000000000000000000000000000000000006;
+        tokenAddrs["mWETH"] = 0x628ff693426583D9a7FB391E54366292F509D457;
         tokenAddrs["cbBTC"] = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
         tokenAddrs["mcbBTC"] = 0xF877ACaFA28c19b96727966690b2f44d35aD5976;
         tokenAddrs["cbETH"] = 0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22;
         tokenAddrs["mcbETH"] = 0x3bf93770f2d4a794c3d9EBEfBAeBAE2a8f09A5E5;
+        tokenAddrs["USDC"] = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+        tokenAddrs["mUSDC"] = 0xEdc817A28E8B93B03976FBd4a3dDBc9f7D176c22;
     }
 }

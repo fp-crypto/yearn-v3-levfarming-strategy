@@ -18,7 +18,7 @@ contract BaseLevFarmingStrategyFactory {
 
     /// @notice Address of SMS that controls strategy management
     /// @dev This address has privileged permissions to update keeper and manage strategies
-    address public constant SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
+    address public immutable SMS = 0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7;
 
     /// @notice Address of the strategy keeper that performs maintenance operations
     /// @dev The keeper can be updated by the SMS

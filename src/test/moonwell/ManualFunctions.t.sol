@@ -99,4 +99,53 @@ contract ManualFunctionsTest is Setup {
 
         assertGt(strategy.estimatedTotalAssets(), etaBefore);
     }
+
+    function test_sweep(uint256 _amount) public {
+        _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        assertApproxEq(
+            strategy.estimatedTotalAssets(),
+            _amount,
+            strategy.minAsset(),
+            "!eta"
+        );
+        checkStrategyTotals(strategy, _amount, _amount, 0);
+        checkLTV(false);
+        logStrategyInfo();
+
+        skip(1 days);
+
+        vm.expectRevert("!management");
+        strategy.sweep(address(asset), _amount);
+
+        vm.startPrank(management);
+
+        vm.expectRevert("!asset");
+        strategy.sweep(address(asset), _amount);
+
+        address well = strategy.WELL();
+        vm.expectRevert("!well");
+        strategy.sweep(well, _amount);
+
+        address cToken = strategy.C_TOKEN();
+        vm.expectRevert("!ctoken");
+        strategy.sweep(cToken, _amount);
+
+        address weth = strategy.WETH();
+        deal(weth, address(strategy), _amount);
+        uint256 balanceBefore = ERC20(weth).balanceOf(management);
+        if (address(asset) == weth) vm.expectRevert("!asset");
+        strategy.sweep(weth, _amount);
+
+        if (address(asset) != weth)
+            assertEq(
+                ERC20(weth).balanceOf(management),
+                balanceBefore + _amount
+            );
+
+        vm.stopPrank();
+    }
 }
