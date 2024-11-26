@@ -22,6 +22,8 @@ contract LevMoonwellStrategyFactory is BaseLevFarmingStrategyFactory {
     /// @dev This will initialize the strategy with proper permissions and settings
     /// @param _cToken The cToken address that matches the asset
     /// @param _name The name for the strategy
+    /// @param _wethToAssetSwapTickSpacing Tick spacing for WETH to asset swaps on Slipstream
+    /// @param _usdcToAssetSwapTickSpacing Tick spacing for USDC to asset swaps on Slipstream
     /// @return Address of the newly deployed strategy
     function newStrategy(
         address _cToken,
