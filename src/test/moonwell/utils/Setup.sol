@@ -55,8 +55,8 @@ contract Setup is ExtendedTest, IEvents {
         _setTokenAddrs();
 
         // Set asset
-        asset = ERC20(tokenAddrs["cbETH"]);
-        cToken = ERC20(tokenAddrs["mcbETH"]);
+        asset = ERC20(tokenAddrs["WETH"]);
+        cToken = ERC20(tokenAddrs["mWETH"]);
 
         // Set decimals
         decimals = asset.decimals();

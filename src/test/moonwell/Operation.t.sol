@@ -60,6 +60,8 @@ contract OperationTest is Setup {
         logStrategyInfo();
 
         skip(strategy.profitMaxUnlockTime());
+        
+        logStrategyInfo();
 
         uint256 balanceBefore = asset.balanceOf(user);
 

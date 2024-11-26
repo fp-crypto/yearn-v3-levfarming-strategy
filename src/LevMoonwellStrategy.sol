@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import {BaseLevFarmingStrategy, ERC20, LevCompStrategy, SafeERC20} from "./LevCompStrategy.sol";
-import {ComptrollerI as MoonwellComptrollerI} from "./interfaces/moonwell/ComptrollerI.sol";
+import {BaseLevFarmingStrategy, ERC20, LevCompStrategy, Math, SafeERC20} from "./LevCompStrategy.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
+import {ComptrollerI as MoonwellComptrollerI} from "./interfaces/moonwell/ComptrollerI.sol";
 import {IMultiRewardDistributor} from "./interfaces/moonwell/IMultiRewardDistributor.sol";
 import {IRouter as IAeroRouter} from "./interfaces/velo/IRouter.sol";
 import {CLSwapSimulator, ISwapRouter} from "./libraries/CLSwapSimulator.sol";
@@ -28,12 +28,16 @@ contract LevMoonwellStrategy is LevCompStrategy {
     address private constant AERODROME_FACTORY =
         0x420DD381b31aEf6683db6B902084cB0FFECe40Da;
 
+    /// @notice Tick spacing for WETH to asset swaps on Slipstream
     int24 public wethToAssetSwapTickSpacing;
+    /// @notice Tick spacing for USDC to asset swaps on Slipstream
     int24 public usdcToAssetSwapTickSpacing;
 
     /// @notice Initializes the strategy with required addresses and settings
     /// @param _cToken The ctoken to use
     /// @param _name The name of the strategy
+    /// @param _wethToAssetSwapTickSpacing Tick spacing for WETH to asset swaps on Slipstream
+    /// @param _usdcToAssetSwapTickSpacing Tick spacing for USDC to asset swaps on Slipstream
     constructor(
         address _cToken,
         string memory _name,
@@ -130,7 +134,7 @@ contract LevMoonwellStrategy is LevCompStrategy {
             .borrowCaps(address(C_TOKEN));
         uint256 _totalBorrows = C_TOKEN.totalBorrows();
         if (_totalBorrows >= _borrowCap) return 0;
-        return _borrowCap - _totalBorrows;
+        return Math.min(_borrowCap - _totalBorrows, C_TOKEN.getCash());
     }
 
     /// @inheritdoc BaseLevFarmingStrategy

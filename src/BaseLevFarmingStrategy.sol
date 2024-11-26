@@ -263,6 +263,20 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     }
 
     /// @inheritdoc BaseStrategy
+    function availableWithdrawLimit(
+        address /*_owner*/
+    ) public view virtual override returns (uint256) {
+        return _maxWithdraw();
+    }
+
+    /// @inheritdoc BaseStrategy
+    function availableDepositLimit(
+        address /*_owner*/
+    ) public view virtual override returns (uint256) {
+        return _maxSupply();
+    }
+
+    /// @inheritdoc BaseStrategy
     function _emergencyWithdraw(uint256 _amount) internal virtual override {
         (uint256 _deposits, uint256 _borrows) = livePosition();
         if (_borrows > minAsset) {
@@ -361,6 +375,14 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @return Maximum supply amount
     /// @dev Must be implemented by specific lending platform integration
     function _maxSupply() internal view virtual returns (uint256) {
+        return type(uint256).max;
+    }
+
+    /// @notice Returns maximum amount that can be withdrawn from the lending platform
+    /// @return Maximum witdrawable amount
+    /// @dev Must be implemented by specific lending platform integration.
+    ///      This is typically the amount of asset idle in the lending market.
+    function _maxWithdraw() internal view virtual returns (uint256) {
         return type(uint256).max;
     }
 

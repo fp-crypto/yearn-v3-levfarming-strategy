@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import {BaseLevFarmingStrategy, ERC20, SafeERC20, Math} from "./BaseLevFarmingStrategy.sol";
+import {BaseLevFarmingStrategy, BaseStrategy, ERC20, SafeERC20, Math} from "./BaseLevFarmingStrategy.sol";
 import {ComptrollerI} from "./interfaces/compound/ComptrollerI.sol";
-import {CErc20I} from "./interfaces/compound/CErc20I.sol";
-import {CTokenI} from "./interfaces/compound/CTokenI.sol";
+import {CErc20I, CTokenI} from "./interfaces/compound/CErc20I.sol";
 
 /// @title Leveraged Compound V2 Strategy
 /// @notice A strategy that uses Compound V2 for leveraged lending/borrowing to maximize yield
@@ -38,7 +37,9 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
         COMPTROLLER = ComptrollerI(CErc20I(_cToken).comptroller());
 
         if (asset.decimals() > ERC20(_cToken).decimals()) {
-            minAsset = uint96(10 ** (asset.decimals() - ERC20(_cToken).decimals()));
+            minAsset = uint96(
+                10 ** (asset.decimals() - ERC20(_cToken).decimals())
+            );
         }
 
         _autoConfigureLTVs();
@@ -85,6 +86,11 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
         if (_amount == 0) return 0;
         require(C_TOKEN.repayBorrow(_amount) == 0);
         return _amount;
+    }
+
+    /// @inheritdoc BaseLevFarmingStrategy
+    function _maxWithdraw() internal override view returns (uint256) {
+        return C_TOKEN.getCash();
     }
 
     /// @inheritdoc BaseLevFarmingStrategy
