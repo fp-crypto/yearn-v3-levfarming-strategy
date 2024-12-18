@@ -66,4 +66,13 @@ contract LevMoonwellStrategyFactory is BaseLevFarmingStrategyFactory {
     ) external view override returns (bool) {
         return deployments[_asset] != address(0);
     }
+
+    /// @notice Verifies if a strategy was deployed by this factory
+    /// @param _strategy The strategy address to verify
+    /// @return bool True if the strategy was deployed by this factory
+    function isStrategyFromFactory(
+        address _strategy
+    ) external view returns (bool) {
+        return deployments[IStrategyInterface(_strategy).asset()] == _strategy;
+    }
 }

@@ -166,10 +166,6 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             _leverDownTo(_newBorrow, _deposits, _borrows);
             (_deposits, _borrows) = livePosition();
             _withdrawExcessCollateral(_targetLTV, _deposits, _borrows);
-            //} else if (_amount < minAsset) {
-            //    return;
-            //} else if (_borrows == 0) {
-            //    _withdraw(_amount < _deposits ? _amount : type(uint256).max);
         } else {
             _withdraw(Math.min(_amount, _deposits));
         }
@@ -286,7 +282,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         if (_borrows == 0) {
             _withdraw(_amount < _deposits ? _amount : type(uint256).max);
         } else {
-            _withdrawExcessCollateral(0, _deposits, _borrows);
+            _withdrawExcessCollateral(targetLTV, _deposits, _borrows);
         }
     }
 
@@ -398,13 +394,13 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
 
         uint256 maxSupply = _maxSupply();
         if (newDeposit - deposits >= maxSupply) {
-            newBorrow = getBorrowFromDeposit(maxSupply, targetLTV);
+            newBorrow = getBorrowFromDeposit(maxSupply + deposits, targetLTV);
         }
         uint256 totalAmountToBorrow = newBorrow - borrows;
 
         _leverUpTo(
             Math.min(totalAmountToBorrow, _maxBorrow()),
-            assetBalance,
+            Math.min(assetBalance, maxSupply),
             deposits,
             borrows
         );
@@ -424,44 +420,51 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     ) internal virtual {
         uint8 _maxIterations = maxIterations;
         uint256 _minAsset = minAsset;
+        uint256 _maxBorrowLTV = maxBorrowLTV;
+
+        // Predefine our variables used in the loop
+        uint256 _borrowAmount;
+        uint256 _canBorrow;
 
         for (
-            uint8 i = 0;
+            uint256 i;
             i < _maxIterations && totalAmountToBorrow > _minAsset;
-            i++
+            ++i
         ) {
-            uint256 amount = totalAmountToBorrow;
+            _borrowAmount = totalAmountToBorrow;
 
             // calculate how much borrow to take
-            uint256 canBorrow = getBorrowFromDeposit(
+            _canBorrow = getBorrowFromDeposit(
                 deposits + assetBalance,
-                maxBorrowLTV
+                _maxBorrowLTV
             );
 
-            if (canBorrow <= borrows) {
+            if (_canBorrow <= borrows) {
                 break;
             }
-            canBorrow = canBorrow - borrows;
+            _canBorrow = _canBorrow - borrows;
 
-            if (canBorrow < amount) {
-                amount = canBorrow;
+            if (_canBorrow < _borrowAmount) {
+                _borrowAmount = _canBorrow;
             }
 
             // deposit available asset as collateral
             _deposit(assetBalance);
 
             // borrow available amount
-            _borrow(amount);
+            _borrow(_borrowAmount);
 
             (deposits, borrows) = livePosition();
-            assetBalance = balanceOfAsset();
+            assetBalance = _borrowAmount; // assetBalance should equal the amount we borrowed
 
-            totalAmountToBorrow = totalAmountToBorrow - amount;
+            totalAmountToBorrow -= _borrowAmount;
         }
 
         if (assetBalance >= minAsset) {
             _deposit(assetBalance);
         }
+        
+        require(liveLTV() < targetLTV + minAdjustRatio, "WTF"); // dev: something very bad happened
     }
 
     /// @notice Reduces leverage down to a target borrowed amount
@@ -483,29 +486,34 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             uint256 _maxBorrowLTV = maxBorrowLTV;
             uint8 _maxIterations = maxIterations;
 
+            // Predefine our variables used in the loop
+            uint256 _withdrawn;
+            uint256 _toRepay;
+            uint256 _repaid;
+
             for (
-                uint8 i = 0;
+                uint256 i;
                 i < _maxIterations && _remainingRepayAmount > _minAsset;
-                i++
+                ++i
             ) {
-                uint256 _withdrawn = _withdrawExcessCollateral(
+                _withdrawn = _withdrawExcessCollateral(
                     _maxBorrowLTV,
                     _deposits,
                     _borrows
                 );
                 _assetBalance = _assetBalance + _withdrawn; // track ourselves to save gas
-                uint256 _toRepay = _remainingRepayAmount;
+                _toRepay = _remainingRepayAmount;
                 if (_toRepay > _assetBalance) {
                     _toRepay = _assetBalance;
                 }
-                uint256 _repaid = _repay(_toRepay);
+                _repaid = _repay(_toRepay);
 
                 // track ourselves to save gas
                 _deposits = _deposits - _withdrawn;
                 _assetBalance = _assetBalance - _repaid;
                 _borrows = _borrows - _repaid;
 
-                _remainingRepayAmount = _remainingRepayAmount - _repaid;
+                _remainingRepayAmount -= _repaid;
             }
         }
 
@@ -519,6 +527,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
                 _deposit(Math.min(_toDeposit, balanceOfAsset()));
             }
         }
+        require(liveLTV() < _targetLTV + minAdjustRatio, "WTF"); // dev: something very bad happened
     }
 
     /// @notice Withdraws excess collateral above target ratio
@@ -606,7 +615,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @return _totalAssets Sum of idle assets, net lending position, and discounted reward value
     /// @dev Applies rewardPessimismFactor to discount estimated reward value
     function estimatedTotalAssets() public view returns (uint256 _totalAssets) {
-        _totalAssets += balanceOfAsset();
+        _totalAssets = balanceOfAsset();
         (uint256 deposits, uint256 borrows) = estimatedPosition();
         _totalAssets += deposits - borrows;
         _totalAssets +=

@@ -173,7 +173,7 @@ contract LevMoonwellStrategy is LevCompStrategy {
             if (address(asset) == address(WETH)) {
                 _rewardsInAsset += outs[outs.length - 1];
             } else {
-                uint256 _wethBalance = WETH.balanceOf(address(this));
+                uint256 _wethBalance = WETH.balanceOf(address(this)) + outs[outs.length - 1];
                 if (_wethBalance != 0) {
                     _rewardsInAsset += CLSwapSimulator.simulateExactInputSingle(
                         ISwapRouter(SLIPSTREAM_ROUTER),
@@ -186,7 +186,7 @@ contract LevMoonwellStrategy is LevCompStrategy {
         if (address(asset) == address(USDC)) {
             _rewardsInAsset += _usdcPending;
         } else if (usdcToAssetSwapTickSpacing != 0) {
-            uint256 _usdcBalance = USDC.balanceOf(address(this));
+            uint256 _usdcBalance = USDC.balanceOf(address(this)) + _usdcPending;
             if (_usdcBalance >= 1e6) {
                 _rewardsInAsset += CLSwapSimulator.simulateExactInputSingle(
                     ISwapRouter(SLIPSTREAM_ROUTER),
