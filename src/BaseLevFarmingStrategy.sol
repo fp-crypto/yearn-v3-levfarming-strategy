@@ -294,7 +294,11 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @dev Can only be called by emergency authorized addresses
     ///      Will withdraw and repay the specified amount
     function manualDeleverage(uint256 amount) external onlyEmergencyAuthorized {
+        (uint256 _deposits, uint256 _borrows) = livePosition();
+        if (amount > _deposits) amount = _deposits;
         _withdraw(amount);
+        
+        if (amount > _borrows) amount = _borrows;
         _repay(amount);
     }
 
@@ -546,7 +550,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         uint256 borrows
     ) internal virtual returns (uint256 amount) {
         if (borrows == 0) {
-            return _withdraw(type(uint256).max);
+            return _withdraw(deposits);
         }
 
         uint256 theoDeposits = getDepositFromBorrow(borrows, collatRatio);
