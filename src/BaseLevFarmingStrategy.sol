@@ -262,14 +262,17 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     function availableWithdrawLimit(
         address /*_owner*/
     ) public view virtual override returns (uint256) {
-        return _maxWithdraw();
+        return _maxWithdraw() + balanceOfAsset();
     }
 
     /// @inheritdoc BaseStrategy
     function availableDepositLimit(
         address /*_owner*/
     ) public view virtual override returns (uint256) {
-        return _maxSupply();
+        uint256 _assetBalance = balanceOfAsset();
+        uint256 _maxSupply = _maxSupply();
+        if (_maxSupply <= _assetBalance) return 0;
+        return _maxSupply - _assetBalance;
     }
 
     /// @inheritdoc BaseStrategy
@@ -387,6 +390,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     function _leverMax() internal {
         (uint256 deposits, uint256 borrows) = livePosition();
         uint256 assetBalance = balanceOfAsset();
+        uint64 _targetLTV = targetLTV;
 
         uint256 realSupply = deposits - borrows + assetBalance;
         uint256 newBorrow = getBorrowFromSupply(realSupply, targetLTV);
@@ -394,7 +398,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
 
         uint256 maxSupply = _maxSupply();
         if (newDeposit - deposits >= maxSupply) {
-            newBorrow = getBorrowFromDeposit(maxSupply + deposits, targetLTV);
+            newBorrow = getBorrowFromDeposit(maxSupply + deposits, _targetLTV);
         }
         uint256 totalAmountToBorrow = newBorrow - borrows;
 
@@ -404,6 +408,8 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             deposits,
             borrows
         );
+
+        require(liveLTV() < _targetLTV + minAdjustRatio, "WTF"); // dev: something very bad happened
     }
 
     /// @notice Executes leveraging up to a target borrowed amount
@@ -463,8 +469,6 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         if (assetBalance >= minAsset) {
             _deposit(assetBalance);
         }
-        
-        require(liveLTV() < targetLTV + minAdjustRatio, "WTF"); // dev: something very bad happened
     }
 
     /// @notice Reduces leverage down to a target borrowed amount
@@ -527,6 +531,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
                 _deposit(Math.min(_toDeposit, balanceOfAsset()));
             }
         }
+
         require(liveLTV() < _targetLTV + minAdjustRatio, "WTF"); // dev: something very bad happened
     }
 
