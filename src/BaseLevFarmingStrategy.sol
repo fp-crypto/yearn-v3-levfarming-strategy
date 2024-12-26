@@ -221,7 +221,8 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             return false;
         }
 
-        uint256 _estimatedLTV = estimatedLTV();
+        (uint256 _deposits, uint256 _borrows) = estimatedPosition();
+        uint256 _estimatedLTV = getLTV(_deposits, _borrows);
 
         if (_estimatedLTV == 0) {
             return false;
@@ -250,6 +251,11 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             return false;
         }
 
+        // Calculate our virtual LTV with idle funds as this allows for more aggresive triggering
+        _estimatedLTV = getLTV(
+            _deposits + Math.min(balanceOfAsset(), _maxSupply()),
+            _borrows
+        );
         // Tend if ltv is lower than target range
         if (_estimatedLTV <= _targetLTV - _minAdjustRatio) {
             return true;
@@ -297,7 +303,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         (uint256 _deposits, uint256 _borrows) = livePosition();
         if (amount > _deposits) amount = _deposits;
         _withdraw(amount);
-        
+
         if (amount > _borrows) amount = _borrows;
         _repay(amount);
     }
@@ -396,7 +402,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         uint256 assetBalance = balanceOfAsset();
         uint64 _targetLTV = targetLTV;
 
-        uint256 realSupply = deposits - borrows + assetBalance;
+        uint256 realSupply = (deposits - borrows) + assetBalance;
         uint256 newBorrow = getBorrowFromSupply(realSupply, targetLTV);
         uint256 newDeposit = getDepositFromBorrow(newBorrow, targetLTV);
 
@@ -510,33 +516,34 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
                     _borrows
                 );
                 _assetBalance = _assetBalance + _withdrawn; // track ourselves to save gas
-                _toRepay = _remainingRepayAmount;
-                if (_toRepay > _assetBalance) {
+                if (_remainingRepayAmount >= _assetBalance) {
                     _toRepay = _assetBalance;
+                } else {
+                    _toRepay = _remainingRepayAmount;
                 }
                 _repaid = _repay(_toRepay);
 
                 // track ourselves to save gas
-                _deposits = _deposits - _withdrawn;
-                _assetBalance = _assetBalance - _repaid;
-                _borrows = _borrows - _repaid;
+                _deposits -= _withdrawn;
+                _assetBalance -= _repaid;
+                _borrows -= _repaid;
 
                 _remainingRepayAmount -= _repaid;
             }
         }
 
-        //(deposits, borrows) = livePosition();
         // deposit back to get targetLTV (we always need to leave this in this ratio)
         uint256 _targetLTV = targetLTV;
         uint256 _targetDeposit = getDepositFromBorrow(_borrows, _targetLTV);
         if (_targetDeposit > _deposits) {
-            uint256 _toDeposit = _targetDeposit - _deposits;
+            uint256 _toDeposit = Math.min(
+                _targetDeposit - _deposits,
+                balanceOfAsset()
+            );
             if (_toDeposit > _minAsset) {
-                _deposit(Math.min(_toDeposit, balanceOfAsset()));
+                _deposit(_toDeposit);
             }
         }
-
-        require(liveLTV() < _targetLTV + minAdjustRatio, "WTF"); // dev: something very bad happened
     }
 
     /// @notice Withdraws excess collateral above target ratio
