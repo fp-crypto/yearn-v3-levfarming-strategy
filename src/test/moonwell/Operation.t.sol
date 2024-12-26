@@ -4,6 +4,8 @@ pragma solidity ^0.8.18;
 import "forge-std/console.sol";
 import {Setup, ERC20} from "./utils/Setup.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {CTokenI} from "../../interfaces/compound/CErc20I.sol";
+import {ComptrollerI as MoonwellComptrollerI} from "../../interfaces/moonwell/ComptrollerI.sol";
 
 contract OperationTest is Setup {
     /// @notice Set up the test environment with zero fees
@@ -60,7 +62,7 @@ contract OperationTest is Setup {
         logStrategyInfo();
 
         skip(strategy.profitMaxUnlockTime());
-        
+
         logStrategyInfo();
 
         uint256 balanceBefore = asset.balanceOf(user);
@@ -420,6 +422,80 @@ contract OperationTest is Setup {
             asset.balanceOf(user),
             balanceBefore + _amount,
             1,
+            "!final balance"
+        );
+
+        logStrategyInfo();
+    }
+
+    /// @notice Test basic deposit and withdrawal flow
+    /// @param _amount The amount to deposit
+    function test_maxSupply(
+        uint256 _amount,
+        uint16 _initialDepositPartBps
+    ) public {
+        _amount = bound(_amount, minFuzzAmount, maxFuzzAmount);
+        _initialDepositPartBps = uint16(bound(_initialDepositPartBps, 1, 9999));
+
+        uint256 _initialAmount = (_amount * _initialDepositPartBps) / 10_000;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _initialAmount);
+
+        assertApproxEq(
+            strategy.estimatedTotalAssets(),
+            _initialAmount,
+            strategy.minAsset(),
+            "!eta"
+        );
+        checkStrategyTotals(strategy, _initialAmount, _initialAmount, 0);
+        checkLTV(false);
+        logStrategyInfo();
+
+        uint256 _remainingAmount = _amount - _initialAmount;
+
+        CTokenI _cToken = CTokenI(strategy.C_TOKEN());
+
+        uint256 _totalSupplied = _cToken.getCash() +
+            _cToken.totalBorrows() -
+            _cToken.totalReserves() +
+            _remainingAmount;
+
+        vm.mockCall(
+            address(strategy.COMPTROLLER()),
+            abi.encodeWithSelector(
+                MoonwellComptrollerI(strategy.COMPTROLLER())
+                    .supplyCaps
+                    .selector,
+                address(cToken)
+            ),
+            abi.encode(_totalSupplied)
+        );
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _remainingAmount);
+
+        assertApproxEq(
+            strategy.estimatedTotalAssets(),
+            _amount,
+            strategy.minAsset(),
+            "!eta"
+        );
+        checkStrategyTotals(strategy, _amount, _amount, 0);
+        checkLTV(false, true); // only check if too high
+        logStrategyInfo();
+
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+
+        // Expect a loss since no profit was created
+        assertGt(asset.balanceOf(user), 0, "!final balance");
+        assertLe(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
             "!final balance"
         );
 
