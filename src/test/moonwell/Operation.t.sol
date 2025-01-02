@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import "forge-std/console.sol";
 import {Setup, ERC20} from "./utils/Setup.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {CTokenI} from "../../interfaces/compound/CErc20I.sol";
+import {CTokenI, CErc20I} from "../../interfaces/compound/CErc20I.sol";
 import {ComptrollerI as MoonwellComptrollerI} from "../../interfaces/moonwell/ComptrollerI.sol";
 
 contract OperationTest is Setup {
@@ -459,7 +459,7 @@ contract OperationTest is Setup {
         uint256 _totalSupplied = _cToken.getCash() +
             _cToken.totalBorrows() -
             _cToken.totalReserves() +
-            _remainingAmount;
+            ((_remainingAmount * 1e18) / (1e18 - strategy.targetLTV()));
 
         vm.mockCall(
             address(strategy.COMPTROLLER()),
@@ -482,7 +482,7 @@ contract OperationTest is Setup {
             "!eta"
         );
         checkStrategyTotals(strategy, _amount, _amount, 0);
-        checkLTV(false, true); // only check if too high
+        checkLTV(false);
         logStrategyInfo();
 
         uint256 balanceBefore = asset.balanceOf(user);
@@ -500,5 +500,68 @@ contract OperationTest is Setup {
         );
 
         logStrategyInfo();
+    }
+
+    function test_maxSupply_tapir() external {
+        // first deposit some tokens to strategy to lever to targetlTV
+        uint256 deposit = 100e18;
+        mintAndDepositIntoStrategy(strategy, user, deposit);
+
+        // log'em
+        logStrategyInfo();
+
+        // figure out whats the remaining supply
+        address comptrollerAddr = address(strategy.COMPTROLLER());
+        address cTokenAddr = address(strategy.C_TOKEN());
+        uint256 _supplyCap = MoonwellComptrollerI(comptrollerAddr).supplyCaps(
+            cTokenAddr
+        );
+        uint256 _totalSupplied = CTokenI(cTokenAddr).getCash() +
+            CTokenI(cTokenAddr).totalBorrows() -
+            CTokenI(cTokenAddr).totalReserves();
+        uint256 _remainingSupply = _supplyCap - _totalSupplied;
+        console.log("Remaining supply: %s", _remainingSupply);
+
+        // enrich the tapir
+        address _tapir = address(69);
+        deal(address(asset), _tapir, type(uint256).max);
+
+        // let tapir mint some tokens
+        vm.startPrank(_tapir);
+        asset.approve(cTokenAddr, type(uint256).max);
+        CErc20I(cTokenAddr).mint(_remainingSupply - 10e18);
+
+        // check whats left to supply
+        _supplyCap = MoonwellComptrollerI(comptrollerAddr).supplyCaps(
+            cTokenAddr
+        );
+        _totalSupplied =
+            CTokenI(cTokenAddr).getCash() +
+            CTokenI(cTokenAddr).totalBorrows() -
+            CTokenI(cTokenAddr).totalReserves();
+        _remainingSupply = _supplyCap - _totalSupplied;
+        console.log("Remaining supply after mint: %s", _remainingSupply);
+        vm.stopPrank();
+
+        // deposit some more tokens, almost fulfill the supply cap, this will revert although
+        // user deposits lesser than the max deposit. Because of leverage attempt.
+        deal(address(asset), user, _remainingSupply - 1000);
+        vm.startPrank(user);
+
+        asset.approve(address(strategy), _remainingSupply - 1000);
+        vm.expectRevert("ERC4626: deposit more than max");
+        strategy.deposit(_remainingSupply - 1000, user);
+
+        uint256 finalDepositToMake = Math.min(
+            asset.balanceOf(user),
+            strategy.maxDeposit(user)
+        );
+        if (finalDepositToMake >= strategy.minAsset()) {
+            asset.approve(address(strategy), finalDepositToMake);
+            strategy.deposit(finalDepositToMake, user);
+        }
+        vm.stopPrank();
+
+        checkLTV(false);
     }
 }
