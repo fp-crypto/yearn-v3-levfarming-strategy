@@ -63,6 +63,11 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
     }
 
     /// @inheritdoc BaseLevFarmingStrategy
+    function _accrueInterest() internal override {
+       require(C_TOKEN.accrueInterest() == 0); 
+    }
+
+    /// @inheritdoc BaseLevFarmingStrategy
     function _deposit(uint256 _amount) internal override {
         if (_amount == 0) return;
         require(C_TOKEN.mint(_amount) == 0);
@@ -128,7 +133,7 @@ contract LevCompStrategy is BaseLevFarmingStrategy {
         returns (uint256 deposits, uint256 borrows)
     {
         deposits = C_TOKEN.balanceOfUnderlying(address(this));
-        //we can use non state changing now because we updated state with balanceOfUnderlying call
+        // can use non state changing now because we updated state with balanceOfUnderlying call
         borrows = C_TOKEN.borrowBalanceStored(address(this));
     }
 

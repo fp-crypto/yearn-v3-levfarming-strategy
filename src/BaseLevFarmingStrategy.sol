@@ -132,11 +132,12 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         uint256 assetBalance = balanceOfAsset();
         // deposit available asset as collateral
         if (assetBalance > minAsset) {
+            _accrueInterest(); // accrue interest checking maxSupply
             _deposit(Math.min(assetBalance, _maxSupply()));
         }
 
         // check current LTV
-        uint256 _liveLTV = liveLTV();
+        uint256 _liveLTV = liveLTV(); // will accrue interest
         uint256 _targetLTV = uint256(targetLTV);
 
         // we should lever up
@@ -149,6 +150,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     function _freeFunds(uint256 _amount) internal override {
         if (_amount == 0) return;
 
+        // we shouldn't need to accrue interest since livePosition will
         (uint256 _deposits, uint256 _borrows) = livePosition();
 
         if (_borrows == 0) {
@@ -189,6 +191,8 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
 
     /// @inheritdoc BaseStrategy
     function _tend(uint256 _totalIdle) internal override {
+        _accrueInterest();
+
         // deposit available asset as collateral
         if (_totalIdle > minAsset) {
             _deposit(Math.min(_totalIdle, _maxSupply()));
@@ -274,11 +278,21 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @inheritdoc BaseStrategy
     function availableDepositLimit(
         address /*_owner*/
-    ) public view virtual override returns (uint256) {
+    ) public view virtual override returns (uint256 _depositLimit) {
         uint256 _assetBalance = balanceOfAsset();
         uint256 _maxSupply = _maxSupply();
-        if (_maxSupply <= _assetBalance) return 0;
-        return _maxSupply - _assetBalance;
+        uint256 _maxBorrow = _maxBorrow();
+        uint256 _targetLTV = targetLTV;
+
+        uint256 _maxDeposit = getDepositFromBorrow(_maxBorrow, targetLTV);
+        if (_maxDeposit > _maxSupply) {
+            _maxDeposit = _maxSupply;
+            _maxBorrow = getBorrowFromDeposit(_maxDeposit, targetLTV);
+        }
+
+        _depositLimit = _maxDeposit - _maxBorrow;
+        if (_assetBalance >= _depositLimit) return 0;
+        _depositLimit -= _assetBalance;
     }
 
     /// @inheritdoc BaseStrategy
@@ -342,6 +356,10 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         maxBorrowLTV = _maxBorrowLTV;
         maxLTV = _maxLTV;
     }
+
+    /// @notice Call the interest accrual function for the lending platform
+    /// @dev Must be implemented by the specific lending platform integration
+    function _accrueInterest() internal virtual {}
 
     /// @notice Deposits asset tokens into the lending platform
     /// @param _amount Amount of asset tokens to deposit
@@ -470,7 +488,9 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
             // borrow available amount
             _borrow(_borrowAmount);
 
-            (deposits, borrows) = livePosition();
+            // track ourselves to save gas
+            deposits += assetBalance;
+            borrows += _borrowAmount;
             assetBalance = _borrowAmount; // assetBalance should equal the amount we borrowed
 
             totalAmountToBorrow -= _borrowAmount;
@@ -499,6 +519,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
 
             uint256 _maxBorrowLTV = maxBorrowLTV;
             uint8 _maxIterations = maxIterations;
+            uint256 _maxWithdraw = _maxWithdraw();
 
             // Predefine our variables used in the loop
             uint256 _withdrawn;
@@ -513,7 +534,8 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
                 _withdrawn = _withdrawExcessCollateral(
                     _maxBorrowLTV,
                     _deposits,
-                    _borrows
+                    _borrows,
+                    _maxWithdraw
                 );
                 _assetBalance = _assetBalance + _withdrawn; // track ourselves to save gas
                 if (_remainingRepayAmount >= _assetBalance) {
@@ -527,6 +549,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
                 _deposits -= _withdrawn;
                 _assetBalance -= _repaid;
                 _borrows -= _repaid;
+                _maxWithdraw = _maxWithdraw + _repaid - _withdrawn;
 
                 _remainingRepayAmount -= _repaid;
             }
@@ -556,6 +579,27 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         uint256 deposits,
         uint256 borrows
     ) internal virtual returns (uint256 amount) {
+        return
+            _withdrawExcessCollateral(
+                collatRatio,
+                deposits,
+                borrows,
+                _maxWithdraw()
+            );
+    }
+
+    /// @notice Withdraws excess collateral above target ratio
+    /// @param collatRatio Target collateral ratio to maintain
+    /// @param deposits Current deposits in lending platform
+    /// @param borrows Current borrows from lending platform
+    /// @param maxWithdraw The maximum withdrawable from lending platform
+    /// @return amount Amount of collateral withdrawn
+    function _withdrawExcessCollateral(
+        uint256 collatRatio,
+        uint256 deposits,
+        uint256 borrows,
+        uint256 maxWithdraw
+    ) internal virtual returns (uint256 amount) {
         if (borrows == 0) {
             return _withdraw(deposits);
         }
@@ -563,6 +607,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         uint256 theoDeposits = getDepositFromBorrow(borrows, collatRatio);
         if (deposits > theoDeposits) {
             uint256 toWithdraw = deposits - theoDeposits;
+            toWithdraw = Math.min(toWithdraw, maxWithdraw);
             if (toWithdraw > minAsset) return _withdraw(toWithdraw);
         }
     }

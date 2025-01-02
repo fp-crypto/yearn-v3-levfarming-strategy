@@ -23,7 +23,7 @@ contract TendTriggerTest is Setup {
         assertFalse(trigger, "no time has passed");
 
         logStrategyInfo();
-        
+
         uint64 _targetLtv = strategy.targetLTV();
         uint64 _maxLtv = strategy.maxLTV();
 
@@ -73,11 +73,7 @@ contract TendTriggerTest is Setup {
         assertFalse(trigger, "just tended");
 
         vm.startPrank(management);
-        strategy.setLTVs(
-            _targetLtv / 2,
-            strategy.maxBorrowLTV(),
-            _maxLtv
-        );
+        strategy.setLTVs(_targetLtv / 2, strategy.maxBorrowLTV(), _maxLtv);
         vm.stopPrank();
 
         (trigger, ) = strategy.tendTrigger();
