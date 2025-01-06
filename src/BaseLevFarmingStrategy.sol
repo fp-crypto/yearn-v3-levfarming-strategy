@@ -59,6 +59,9 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     /// @notice Factor to discount estimated rewards value (1000 = 10%)
     uint16 public rewardPessimismFactor = 1000;
 
+    /// @notice Initializes the strategy with the target asset and name
+    /// @param _asset The address of the asset token this strategy will manage
+    /// @param _name The name of this strategy
     constructor(
         address _asset,
         string memory _name
@@ -303,7 +306,7 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
         }
         (_deposits, _borrows) = livePosition();
         if (_borrows == 0) {
-            _withdraw(_amount < _deposits ? _amount : type(uint256).max);
+            _withdraw(_amount < _deposits ? _amount : _deposits);
         } else {
             _withdrawExcessCollateral(targetLTV, _deposits, _borrows);
         }
@@ -629,8 +632,9 @@ abstract contract BaseLevFarmingStrategy is BaseHealthCheck {
     }
 
     /// @notice Gets the protocol's LTV and liquidation threshold values
-    /// @return ltv The loan-to-value ratio in WAD
-    /// @return liquidationThreshold The liquidation threshold in WAD
+    /// @dev Must be implemented by specific lending platform integration
+    /// @return ltv The loan-to-value ratio in WAD (1e18)
+    /// @return liquidationThreshold The liquidation threshold in WAD (1e18)
     function getProtocolLTVs()
         internal
         view
