@@ -15,7 +15,7 @@ contract LevMoonwellStrategyFactory is BaseLevFarmingStrategyFactory {
     /// @notice Creates a new factory instance
     /// @param _keeper The initial keeper address
     constructor(address _keeper) BaseLevFarmingStrategyFactory(_keeper) {
-        SMS = 0x01fE3347316b2223961B20689C65eaeA71348e93;
+        SMS = 0xde9e11D8a6894D47A3b407464b58b5dB9C97a58c;
     }
 
     /// @notice Deploy a new strategy with a custom Moonwell addresses provider
