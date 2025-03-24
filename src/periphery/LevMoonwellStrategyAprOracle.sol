@@ -4,12 +4,10 @@ pragma solidity ^0.8.18;
 import {LevCompStrategyAprOracle} from "./LevCompStrategyAprOracle.sol";
 import {ILevMoonwellStrategyInterface} from "../interfaces/ILevMoonwellStrategyInterface.sol";
 import {IMultiRewardDistributor} from "../interfaces/moonwell/IMultiRewardDistributor.sol";
-import {CTokenI} from "../interfaces/compound/CTokenI.sol";
+import {CErc20I} from "../interfaces/compound/CErc20I.sol";
 import {ComptrollerI} from "../interfaces/moonwell/ComptrollerI.sol";
 import {IRouter as IAeroRouter} from "../interfaces/velo/IRouter.sol";
 import {CLSwapSimulator, ISwapRouter} from "../libraries/CLSwapSimulator.sol";
-
-import "forge-std/console.sol";
 
 contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
     address public constant WETH = 0x4200000000000000000000000000000000000006;
@@ -27,98 +25,87 @@ contract LevMoonwellStrategyAprOracle is LevCompStrategyAprOracle {
     }
 
     function getAprFromRewards(
-        address _strategy,
-        uint256 _ourSupply,
-        uint256 _ourBorrows,
-        uint256 _cash,
-        uint256 _totalBorrows
+        AprFromRewardsParams memory _params
     ) internal view override returns (uint256 _apr) {
-        CTokenI _cToken = CTokenI(
-            ILevMoonwellStrategyInterface(_strategy).C_TOKEN()
-        );
+        CErc20I _cToken = CErc20I(_params.cToken);
 
         IMultiRewardDistributor _rewardDistributor = ComptrollerI(
-            ILevMoonwellStrategyInterface(_strategy).COMPTROLLER()
+            _cToken.comptroller()
         ).rewardDistributor();
 
-        uint256 _totalReserves = _cToken.totalReserves();
+        RewardAprParams memory rewardAprParams = RewardAprParams({
+            asset: CErc20I(_params.cToken).underlying(),
+            marketConfig: _rewardDistributor.getConfigForMarket(_cToken, WELL),
+            rewardToken: WELL,
+            rewardSwapTickSpacing: ILevMoonwellStrategyInterface(
+                _params.strategy
+            ).wethToAssetSwapTickSpacing(),
+            ourSupply: _params.ourSupply,
+            ourBorrows: _params.ourBorrows,
+            cash: _params.cash,
+            totalBorrows: _params.totalBorrows,
+            totalReserves: _cToken.totalReserves()
+        });
 
-        IMultiRewardDistributor.MarketConfig
-            memory _marketConfig = _rewardDistributor.getConfigForMarket(
-                _cToken,
-                WELL
-            );
+        _apr += _getRewardApr(rewardAprParams);
 
-        _apr += _getRewardApr(
-            _strategy,
-            _marketConfig,
-            WELL,
-            ILevMoonwellStrategyInterface(_strategy)
-                .wethToAssetSwapTickSpacing(),
-            _ourSupply,
-            _ourBorrows,
-            _cash,
-            _totalBorrows,
-            _totalReserves
+        rewardAprParams.marketConfig = _rewardDistributor.getConfigForMarket(
+            _cToken,
+            USDC
         );
+        rewardAprParams.rewardToken = USDC;
+        rewardAprParams.rewardSwapTickSpacing = ILevMoonwellStrategyInterface(
+            _params.strategy
+        ).usdcToAssetSwapTickSpacing();
 
-        _marketConfig = _rewardDistributor.getConfigForMarket(_cToken, USDC);
+        _apr += _getRewardApr(rewardAprParams);
+    }
 
-        _apr += _getRewardApr(
-            _strategy,
-            _marketConfig,
-            USDC,
-            ILevMoonwellStrategyInterface(_strategy)
-                .usdcToAssetSwapTickSpacing(),
-            _ourSupply,
-            _ourBorrows,
-            _cash,
-            _totalBorrows,
-            _totalReserves
-        );
+    struct RewardAprParams {
+        address asset;
+        IMultiRewardDistributor.MarketConfig marketConfig;
+        address rewardToken;
+        int24 rewardSwapTickSpacing;
+        uint256 ourSupply;
+        uint256 ourBorrows;
+        uint256 cash;
+        uint256 totalBorrows;
+        uint256 totalReserves;
     }
 
     function _getRewardApr(
-        address _asset,
-        IMultiRewardDistributor.MarketConfig memory _marketConfig,
-        address _rewardToken,
-        int24 _rewardSwapTickSpacing,
-        uint256 _ourSupply,
-        uint256 _ourBorrows,
-        uint256 _cash,
-        uint256 _totalBorrows,
-        uint256 _totalReserves
+        RewardAprParams memory _params
     ) private view returns (uint256) {
-        return 0;
+        if (
+            _params.marketConfig.supplyEmissionsPerSec == 0 &&
+            _params.marketConfig.borrowEmissionsPerSec == 0
+        ) return 0;
 
-        // if (
-        //     _marketConfig.supplyEmissionsPerSec == 0 &&
-        //     _marketConfig.borrowEmissionsPerSec == 0
-        // ) return 0;
+        uint256 _rewardPerSecond = (_params.ourSupply *
+            _params.marketConfig.supplyEmissionsPerSec) /
+            (_params.cash + _params.totalBorrows - _params.totalReserves);
+        _rewardPerSecond +=
+            (_params.ourBorrows * _params.marketConfig.borrowEmissionsPerSec) /
+            _params.totalBorrows;
 
-        // uint256 _rewardInAssetPerYear;
+        uint256 _rewardInAssetPerYear;
 
-        // uint256 _rewardPerSecond = (_ourSupply *
-        //     _marketConfig.supplyEmissionsPerSec) /
-        //     (_cash + _totalBorrows - _totalReserves);
-        // _rewardPerSecond +=
-        //     (_ourBorrows * _marketConfig.borrowEmissionsPerSec) /
-        //     _totalBorrows;
+        if (_params.asset == _params.rewardToken) {
+            _rewardInAssetPerYear = _rewardPerSecond * 365 days;
+        } else {
+            _rewardInAssetPerYear =
+                (estimatedRewardInAsset(
+                    _params.rewardToken,
+                    _rewardPerSecond * 7 days,
+                    _params.asset,
+                    _params.rewardSwapTickSpacing
+                ) * 365 days) /
+                7 days;
+        }
 
-        // if (_asset == _rewardToken) {
-        //     _rewardInAssetPerYear = _rewardPerSecond * 365 days;
-        // } else {
-        //     _rewardInAssetPerYear =
-        //         (estimatedRewardInAsset(
-        //             _rewardToken,
-        //             _rewardPerSecond * 7 days,
-        //             _asset,
-        //             _rewardSwapTickSpacing
-        //         ) * 365 days) /
-        //         7 days;
-        // }
-
-        // return (_rewardInAssetPerYear * 1e18) / (_ourSupply - _ourBorrows);
+        return
+            (_rewardInAssetPerYear * 1e18) /
+            (_params.ourSupply - _params.ourBorrows);
     }
 
     function estimatedRewardInAsset(

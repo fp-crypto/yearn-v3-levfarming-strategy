@@ -34,7 +34,7 @@ contract Setup is ExtendedTest, IEvents {
     address public user = address(10);
     address public keeper = address(4);
     address public management =
-        address(0x01fE3347316b2223961B20689C65eaeA71348e93);
+        address(0xde9e11D8a6894D47A3b407464b58b5dB9C97a58c);
     address public performanceFeeRecipient = address(3);
 
     // Address of the real deployed Factory
@@ -55,8 +55,8 @@ contract Setup is ExtendedTest, IEvents {
         _setTokenAddrs();
 
         // Set asset
-        asset = ERC20(tokenAddrs["WETH"]);
-        cToken = ERC20(tokenAddrs["mWETH"]);
+        asset = ERC20(tokenAddrs["wstETH"]);
+        cToken = ERC20(tokenAddrs["mwstETH"]);
 
         // Set decimals
         decimals = asset.decimals();
@@ -104,7 +104,7 @@ contract Setup is ExtendedTest, IEvents {
         // _strategy.setDepositLimit(2 ** 256 - 1);
         _strategy.setProfitMaxUnlockTime(profitMaxUnlockTime);
 
-        _strategy.setMinAsset(1e12);
+        _strategy.setMinAsset(1e4);
 
         vm.stopPrank();
 
@@ -283,5 +283,7 @@ contract Setup is ExtendedTest, IEvents {
         tokenAddrs["mcbETH"] = 0x3bf93770f2d4a794c3d9EBEfBAeBAE2a8f09A5E5;
         tokenAddrs["USDC"] = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
         tokenAddrs["mUSDC"] = 0xEdc817A28E8B93B03976FBd4a3dDBc9f7D176c22;
+        tokenAddrs["wstETH"]= 0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452;
+        tokenAddrs["mwstETH"]= 0x627Fe393Bc6EdDA28e99AE648fD6fF362514304b;
     }
 }
